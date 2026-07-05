@@ -48,8 +48,8 @@ strand_passage_guiV3_4 -> link_engine_v3_4 -> draw_dt_original_labelsV3_11
 Clone the repository:
 
 ```bash
-git clone https://github.com/DiLiuLab/strand-passage-explorer.git
-cd strand-passage-explorer
+git clone https://github.com/DiLiuLab/dt_strand_passage_explorer.git
+cd dt_strand_passage_explorer
 ```
 
 `git clone` downloads the project into a new folder and sets `origin` to the
