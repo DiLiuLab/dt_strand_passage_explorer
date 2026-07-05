@@ -851,6 +851,7 @@ def backtrack_simplify(snappy, link, mode="global", rounds=0, steps=20,
         best_dt = dt_to_string(parse_dt_any(link.DT_code()))
     except Exception:  # noqa: BLE001
         best_dt = None
+
     if target is not None and best_n <= int(target):
         return link
 
@@ -945,15 +946,20 @@ def snappy_global_simplification(
         result["simplified_linking_matrix"] = simplified_matrix
         result["simplified_component_signatures"] = simplified_sigs
         try:
-            result["jones"] = str(Ls.jones_polynomial())
+            snap_jones = str(Ls.jones_polynomial())
         except Exception:  # noqa: BLE001
-            result["jones"] = "n/a"
+            snap_jones = "n/a"
+        result["jones"] = snap_jones
         try:
             raw_dt = Ls.DT_code()
             simplified_comps = parse_dt_any(raw_dt)
             simplified_dt = dt_to_string(simplified_comps)
             result["simplified_dt"] = simplified_dt
             result["simplified_dt_comps"] = simplified_comps
+            try:
+                result["jones"] = str(snappy.Link(simplified_dt).jones_polynomial())
+            except Exception:  # noqa: BLE001
+                result["jones"] = snap_jones
         except Exception as exc:  # noqa: BLE001
             result["simplified_dt_error"] = str(exc)
             simplified_comps = None

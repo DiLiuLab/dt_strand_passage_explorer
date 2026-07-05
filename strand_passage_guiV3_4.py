@@ -469,10 +469,6 @@ def strand_passage_nongui(snappy, dt_code, orig_components=None,
                     rounds=backtrack_rounds, steps=backtrack_steps)
                 new_components = len(new_link.link_components)
                 snappy_crossings = len(new_link.crossings)
-                try:
-                    new_jones = new_link.jones_polynomial()
-                except Exception:  # noqa: BLE001
-                    new_jones = None
                 simplified_code = _normalize_dt_code(new_link.DT_code())
                 simplified_str = str(simplified_code)
 
@@ -487,6 +483,7 @@ def strand_passage_nongui(snappy, dt_code, orig_components=None,
                     chosen_str = str(new_dt)
                     chosen_crossings = direct_crossings
                     chosen_code = new_dt
+                chosen_jones = _jones_for_dt(snappy, chosen_code)
 
                 # Outcome category (kept from the original script; compares the
                 # SnapPy-simplified result against the original simplified link).
@@ -507,12 +504,12 @@ def strand_passage_nongui(snappy, dt_code, orig_components=None,
             except Exception as exc:  # noqa: BLE001
                 new_components = None
                 snappy_crossings = None
-                new_jones = None
                 simplified_str = None
                 chosen_source = "direct-after-passage"
                 chosen_str = str(new_dt)
                 chosen_crossings = direct_crossings
                 chosen_code = new_dt
+                chosen_jones = _jones_for_dt(snappy, chosen_code)
                 category = 'error: %s' % exc
 
             results.append({
@@ -525,7 +522,7 @@ def strand_passage_nongui(snappy, dt_code, orig_components=None,
                 'direct_crossings': direct_crossings,
                 'snappy_crossings': snappy_crossings,
                 'chosen_crossings': chosen_crossings,
-                'Jones_polynomial': str(new_jones),
+                'Jones_polynomial': str(chosen_jones),
                 'orig_components': orig_components,
                 'new_components': new_components,
                 'orig_crossings': orig_crossings,
@@ -543,6 +540,14 @@ def _num_components(snappy, dt_code):
         return len(snappy.Link(_dt_code_to_str(dt_code)).link_components)
     except Exception:  # noqa: BLE001
         return -1
+
+
+def _jones_for_dt(snappy, dt_code):
+    """Jones polynomial for the exact DT code shown in the spreadsheet."""
+    try:
+        return str(snappy.Link(_dt_code_to_str(dt_code)).jones_polynomial())
+    except Exception:  # noqa: BLE001
+        return "None"
 
 
 def _label_sort_key(s):
@@ -1025,10 +1030,7 @@ def run_nongui(dt_string, out_path, negative_even="over",
                                   rounds=backtrack_rounds, steps=backtrack_steps)
         root_crossings = len(L0.crossings)
         root_components = len(L0.link_components)
-        try:
-            root_jones = str(L0.jones_polynomial())
-        except Exception:  # noqa: BLE001
-            root_jones = "None"
+        root_jones = _jones_for_dt(snappy, dt_code)
     except Exception:  # noqa: BLE001
         root_crossings = _crossing_count(dt_code)
         root_components = _num_components(snappy, dt_code)

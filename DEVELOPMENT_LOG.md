@@ -59,6 +59,10 @@ What is new in V3.4 (GitHub packaging + icon)
   * draw_dt_original_labelsV3_11.py adds optional Tk window/task-menu icon
     support using assets/strand_passage_icon.png. If the icon file is absent or
     the local Tk build cannot load it, the GUI simply continues without an icon.
+  * Bug fix: the GUI and --nongui outputs now report the Jones polynomial of the
+    exact DT code shown/drawn and used for the next passage step. This avoids
+    mismatches when a transient SnapPy simplified object and its exported
+    DT_code do not round-trip with identical Jones values.
 
 
 What is new in V3.3 (backtrack-assisted simplification)
