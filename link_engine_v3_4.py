@@ -229,6 +229,8 @@ class Diagram(object):
         d.colours_tracked = self.colours_tracked
         d.last_snap_result = self.last_snap_result
         d._dt_labels_valid = self._dt_labels_valid
+        if hasattr(self, "crossing_display_ids"):
+            d.crossing_display_ids = list(self.crossing_display_ids)
         if hasattr(self, "_dt_model"):
             d._dt_model = self._dt_model
         return d
@@ -529,6 +531,27 @@ def _layout_like_helper(model, G):
     return P
 
 
+def _display_crossing_ids_for_model(diagram, model):
+    """Displayed crossing IDs for one rendered block.
+
+    ``model["crossings"][k]["id"]`` is the diagram's real internal crossing id,
+    while the returned list is only for labels drawn on the figure.
+    """
+    ids = getattr(diagram, "crossing_display_ids", None)
+    if not ids:
+        return D.default_crossing_ids(model)
+    out = []
+    try:
+        for c in model["crossings"]:
+            x = int(c["id"])
+            out.append(str(ids[x]))
+    except Exception:  # noqa: BLE001
+        return D.default_crossing_ids(model)
+    if len(out) != len(model["crossings"]):
+        return D.default_crossing_ids(model)
+    return out
+
+
 def render(diagram, ax, show_crossing_ids=True, show_dt_labels=False,
            palette=None, title=None):
     """
@@ -577,6 +600,7 @@ def render(diagram, ax, show_crossing_ids=True, show_dt_labels=False,
                     color_for(model["comp_color_index"][li], palette))
         _, cxy = D.render_diagram(
             ax, model, P, centers, color_of=color_of,
+            crossing_ids=_display_crossing_ids_for_model(diagram, model),
             show_labels=do_labels, show_crossing_ids=show_crossing_ids,
             color_crossing_ids_by_overstrand=True,
             arrows=True, origin=origin, scale_to=tile * 0.72)

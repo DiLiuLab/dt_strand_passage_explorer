@@ -93,6 +93,10 @@ sage -python strand_passage_guiV3_4.py --nongui \
   --out strand_passage_results.xlsx
 ```
 
+For one-crossing components, use Python tuple syntax with a trailing comma:
+`DT: [(4,), (2,)]`, not `DT: [(4), (2)]`.  The latter is ambiguous because
+Python reads `(4)` as the integer `4`.
+
 In `--nongui` mode, `--out` controls both output files. If you set:
 
 ```text
@@ -110,6 +114,21 @@ If the path does not end in `.xlsx`, the script adds it first. For example,
 `--out results/run1` writes `results/run1.xlsx` and
 `results/run1_overview.svg`. To choose the SVG directory and basename, choose the
 directory and basename of the spreadsheet path.
+
+Custom displayed crossing IDs use the same syntax as
+`draw_dt_original_labelsV3_11.py`:
+
+```bash
+sage -python strand_passage_guiV3_4.py \
+  --dt "DT: [(4,6,2)]" \
+  --crossing-order "c1 c3 c2"
+```
+
+`--crossing-order` lists displayed crossing IDs in odd-label order
+`1,3,5,...`.  Alternatively, use `--crossing-map "c1=1,c3=3,c2=5"`.
+In the GUI, the same controls are available as `Crossing order` and
+`Crossing map`.  These labels affect the drawing and passage notes only; the
+internal strand-passage calculation still uses the underlying DT crossing ids.
 
 Spreadsheet columns to know:
 

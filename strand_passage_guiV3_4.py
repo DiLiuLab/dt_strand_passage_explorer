@@ -105,6 +105,59 @@ TILE = 2.4
 SINGLE_CROSSING_RADIUS = 0.28
 
 
+def _apply_crossing_display_options(diagram, crossing_order=None,
+                                    crossing_map=None, strict=True):
+    """Attach custom displayed crossing IDs to a diagram.
+
+    The labels are display-only; strand-passage operations still use the
+    diagram's internal crossing ids.
+    """
+    crossing_order = (crossing_order or "").strip()
+    crossing_map = (crossing_map or "").strip()
+    if not crossing_order and not crossing_map:
+        if hasattr(diagram, "crossing_display_ids"):
+            delattr(diagram, "crossing_display_ids")
+        return diagram
+    model = getattr(diagram, "_dt_model", None)
+    if model is None:
+        if strict:
+            raise ValueError("custom crossing IDs need a diagram built from a DT code")
+        return diagram
+    try:
+        ids = D.resolve_crossing_ids(
+            model,
+            crossing_order=crossing_order or None,
+            crossing_map=crossing_map or None,
+        )
+    except Exception:
+        if strict:
+            raise
+        return diagram
+    if len(ids) != len(diagram.crossings()):
+        if strict:
+            raise ValueError(
+                "custom crossing IDs describe %d crossings, but this diagram has %d"
+                % (len(ids), len(diagram.crossings())))
+        return diagram
+    diagram.crossing_display_ids = list(ids)
+    return diagram
+
+
+def _inherit_crossing_display_ids(source, target):
+    """Carry display labels across a passage when the crossing count still fits."""
+    ids = getattr(source, "crossing_display_ids", None)
+    if ids and len(ids) == len(target.crossings()):
+        target.crossing_display_ids = list(ids)
+    return target
+
+
+def _crossing_display_label(diagram, crossing_id):
+    ids = getattr(diagram, "crossing_display_ids", None)
+    if ids and 0 <= int(crossing_id) < len(ids):
+        return str(ids[int(crossing_id)])
+    return "c%d" % (int(crossing_id) + 1)
+
+
 def _hit_radius(targets):
     """Adaptive click/hover radius so the pointing hand only appears when the
     cursor is genuinely ON a crossing.
@@ -193,6 +246,7 @@ def advance(diagram, crossing_id, negative_even="over", use_snappy_global=True,
             direct = None
     if direct is None:
         direct = working
+    _inherit_crossing_display_ids(diagram, direct)
     direct.display_source = "direct after-passage DT"
     direct_crossings = len(direct.crossings())
 
@@ -206,6 +260,8 @@ def advance(diagram, crossing_id, negative_even="over", use_snappy_global=True,
             backtrack_rounds=backtrack_rounds, backtrack_steps=backtrack_steps)
         simplified_crossings = snap.get("simplified_crossings")
         snap_diagram = snap.get("diagram")
+        if snap_diagram is not None:
+            _inherit_crossing_display_ids(diagram, snap_diagram)
         if (snap_diagram is not None and simplified_crossings is not None
                 and int(simplified_crossings) < int(direct_crossings)):
             chosen = snap_diagram
@@ -247,8 +303,9 @@ def advance(diagram, crossing_id, negative_even="over", use_snappy_global=True,
 
     chosen.last_snap_result = snap
     after = len(chosen.crossings())
-    note = ("Passage at c%d (on %s): %d -> %d crossings drawn%s."
-            % (crossing_id + 1, source_kind, before, after, phrase))
+    note = ("Passage at %s (on %s): %d -> %d crossings drawn%s."
+            % (_crossing_display_label(diagram, crossing_id),
+               source_kind, before, after, phrase))
     return chosen, note, snap
 
 
@@ -342,12 +399,14 @@ def properties_text(diagram, note, snap, passage_log, use_snappy_global=True):
 #  Headless proof-of-cascade (no interactive backend required)
 # --------------------------------------------------------------------------- #
 def render_chain(dt_string, clicks, out_path, negative_even="over",
-                 use_snappy_global=True, backtrack_rounds=0, backtrack_steps=20):
+                 use_snappy_global=True, backtrack_rounds=0, backtrack_steps=20,
+                 crossing_order=None, crossing_map=None):
     """Simulate a click sequence and render original + each step as a panel row."""
     import matplotlib.pyplot as plt
 
     start = E.Diagram.from_dt_code(D.parse_dt(dt_string),
                                    negative_even=negative_even)
+    _apply_crossing_display_options(start, crossing_order, crossing_map)
     start.display_source = "original"
     panels = [("original", start, None)]
     current = start
@@ -382,8 +441,7 @@ def render_chain(dt_string, clicks, out_path, negative_even="over",
 # --------------------------------------------------------------------------- #
 def _dt_code_to_str(dt_code):
     """Convert a DT code (list of tuples) to SnapPy's 'DT: [...]' string."""
-    return ("DT: [" + ", ".join(
-        "(" + ",".join(str(x) for x in comp) + ")" for comp in dt_code) + "]")
+    return E.dt_to_string(dt_code)
 
 
 def _build_label_intervals(dt_code):
@@ -756,7 +814,8 @@ ARROW_COLORS = [
 
 def render_overview_svg(nodes, edges, out_path, negative_even="over",
                         title_dt=None, backtrack_rounds=None,
-                        backtrack_steps=None):
+                        backtrack_steps=None, crossing_order=None,
+                        crossing_map=None):
     """Draw the two-step passage tree as one large, tidy, informative SVG.
 
     Columns are passage depth (0 = original, 1 = after one passage, 2 = after
@@ -901,6 +960,8 @@ def render_overview_svg(nodes, edges, out_path, negative_even="over",
         ax.set_zorder(5)
         try:
             diag = E.Diagram.from_dt_code(n["dt_code"], negative_even=negative_even)
+            _apply_crossing_display_options(
+                diag, crossing_order, crossing_map, strict=False)
             E.render(diag, ax, show_crossing_ids=True, show_dt_labels=True)
         except Exception as exc:  # noqa: BLE001
             ax.axis("off")
@@ -989,7 +1050,8 @@ def render_overview_svg(nodes, edges, out_path, negative_even="over",
 
 
 def run_nongui(dt_string, out_path, negative_even="over",
-               backtrack_rounds=0, backtrack_steps=20):
+               backtrack_rounds=0, backtrack_steps=20,
+               crossing_order=None, crossing_map=None):
     """Two-pass strand-passage spreadsheet (like the original batch workflow),
     plus a large overview SVG of every resulting structure with merged duplicates.
 
@@ -1010,6 +1072,15 @@ def run_nongui(dt_string, out_path, negative_even="over",
         return 2
 
     dt_code = [tuple(int(x) for x in comp) for comp in D.parse_dt(dt_string)]
+    if (crossing_order and crossing_order.strip()) or (crossing_map and crossing_map.strip()):
+        try:
+            root_for_ids = E.Diagram.from_dt_code(dt_code, negative_even=negative_even)
+            _apply_crossing_display_options(
+                root_for_ids, crossing_order, crossing_map, strict=True)
+        except Exception as exc:  # noqa: BLE001
+            print("[error] invalid crossing-order/crossing-map: %s" % exc,
+                  file=sys.stderr)
+            return 2
 
     # Merged-structure node/edge accumulator for the overview SVG.
     nodes: Dict[Any, Dict[str, Any]] = {}
@@ -1127,7 +1198,9 @@ def run_nongui(dt_string, out_path, negative_even="over",
         render_overview_svg(node_list, edge_list, overview_path,
                             negative_even=negative_even, title_dt=dt_string,
                             backtrack_rounds=backtrack_rounds,
-                            backtrack_steps=backtrack_steps)
+                            backtrack_steps=backtrack_steps,
+                            crossing_order=crossing_order,
+                            crossing_map=crossing_map)
         print("[ok] wrote %s  (%d unique structures, %d passage arrows)"
               % (overview_path, len(node_list), len(edge_list)))
     except Exception as exc:  # noqa: BLE001
@@ -1251,7 +1324,8 @@ class StrandPassageApp(object):
                  use_snappy_global=True, gui_backend="auto",
                  backtrack_enabled=True,
                  backtrack_rounds=DEFAULT_BACKTRACK_ROUNDS,
-                 backtrack_steps=DEFAULT_BACKTRACK_STEPS):
+                 backtrack_steps=DEFAULT_BACKTRACK_STEPS,
+                 crossing_order=None, crossing_map=None):
         self.root = root
         self.tk = tk
         self.ttk = ttk
@@ -1261,6 +1335,8 @@ class StrandPassageApp(object):
         self.init_backtrack_enabled = bool(backtrack_enabled)
         self.init_backtrack_rounds = int(backtrack_rounds)
         self.init_backtrack_steps = int(backtrack_steps)
+        self.init_crossing_order = crossing_order or ""
+        self.init_crossing_map = crossing_map or ""
         self.windows: List[Any] = []
         self.step_count = 0
         self.tile = TILE
@@ -1290,7 +1366,9 @@ class StrandPassageApp(object):
         tk, ttk = self.tk, self.ttk
         self.root.title("Strand passage explorer V%s  -  click a crossing to "
                         "branch a new window" % VERSION)
-        bar = ttk.Frame(self.root, padding=6)
+        controls = ttk.Frame(self.root, padding=6)
+        controls.pack(side=tk.TOP, fill=tk.X)
+        bar = ttk.Frame(controls)
         bar.pack(side=tk.TOP, fill=tk.X)
         ttk.Label(bar, text="DT code:").pack(side=tk.LEFT)
         self.dt_var = tk.StringVar(value=dt_string or DEFAULT_DT)
@@ -1318,11 +1396,28 @@ class StrandPassageApp(object):
         ttk.Button(bar, text="Close passage windows",
                    command=self.close_children).pack(side=tk.RIGHT, padx=2)
 
+        order_bar = ttk.Frame(controls)
+        order_bar.pack(side=tk.TOP, fill=tk.X, pady=(4, 0))
+        ttk.Label(order_bar, text="Crossing order:").pack(side=tk.LEFT)
+        self.crossing_order_var = tk.StringVar(value=self.init_crossing_order)
+        ttk.Entry(order_bar, textvariable=self.crossing_order_var, width=48).pack(
+            side=tk.LEFT, padx=(4, 10), fill=tk.X, expand=True)
+        ttk.Label(order_bar, text="Crossing map:").pack(side=tk.LEFT)
+        self.crossing_map_var = tk.StringVar(value=self.init_crossing_map)
+        ttk.Entry(order_bar, textvariable=self.crossing_map_var, width=34).pack(
+            side=tk.LEFT, padx=(4, 0), fill=tk.X, expand=True)
+
     def load(self):
         self.close_children()
         try:
             start = E.Diagram.from_dt_code(D.parse_dt(self.dt_var.get()),
                                            negative_even=self.negative_even)
+            _apply_crossing_display_options(
+                start,
+                self.crossing_order_var.get(),
+                self.crossing_map_var.get(),
+                strict=True,
+            )
         except Exception as exc:  # noqa: BLE001
             self._error_window("Could not parse/load DT code:\n\n%s" % exc)
             return
@@ -1533,7 +1628,8 @@ class StrandPassageApp(object):
 def run_gui(dt_string=None, negative_even="over", use_snappy_global=True,
             gui_backend="auto", backtrack_enabled=True,
             backtrack_rounds=DEFAULT_BACKTRACK_ROUNDS,
-            backtrack_steps=DEFAULT_BACKTRACK_STEPS):
+            backtrack_steps=DEFAULT_BACKTRACK_STEPS,
+            crossing_order=None, crossing_map=None):
     import tkinter as tk
     from tkinter import ttk
 
@@ -1546,7 +1642,9 @@ def run_gui(dt_string=None, negative_even="over", use_snappy_global=True,
                      gui_backend=gui_backend,
                      backtrack_enabled=backtrack_enabled,
                      backtrack_rounds=backtrack_rounds,
-                     backtrack_steps=backtrack_steps)
+                     backtrack_steps=backtrack_steps,
+                     crossing_order=crossing_order,
+                     crossing_map=crossing_map)
     root.mainloop()
 
 
@@ -1603,6 +1701,12 @@ def main():
                     default="auto",
                     help="Tk drawing backend: auto (default), tkagg, or agg "
                          "(agg = static image fallback if TkAgg won't load)")
+    ap.add_argument("--crossing-order", default=None,
+                    help="displayed crossing IDs ordered by odd DT labels, "
+                         "using the same syntax as draw_dt_original_labels")
+    ap.add_argument("--crossing-map", default=None,
+                    help="alternative explicit map such as 'c1=1,c7=3'; "
+                         "do not combine with --crossing-order")
     ap.add_argument("--backtrack", action="store_true",
                     help="(kept for compatibility; backtrack is ON by default "
                          "in V3.4 -- use --no-backtrack to disable)")
@@ -1633,7 +1737,9 @@ def main():
         rc = run_nongui(dt, args.out or "strand_passage_results.xlsx",
                         negative_even=args.negative_even,
                         backtrack_rounds=backtrack_rounds,
-                        backtrack_steps=backtrack_steps)
+                        backtrack_steps=backtrack_steps,
+                        crossing_order=args.crossing_order,
+                        crossing_map=args.crossing_map)
         sys.exit(rc)
 
     if args.demo is not None:
@@ -1642,7 +1748,9 @@ def main():
         render_chain(dt, args.demo, out, negative_even=args.negative_even,
                      use_snappy_global=use_snappy_global,
                      backtrack_rounds=backtrack_rounds,
-                     backtrack_steps=backtrack_steps)
+                     backtrack_steps=backtrack_steps,
+                     crossing_order=args.crossing_order,
+                     crossing_map=args.crossing_map)
         print("[ok] wrote", out)
         return
 
@@ -1650,7 +1758,9 @@ def main():
             use_snappy_global=use_snappy_global, gui_backend=args.gui_backend,
             backtrack_enabled=backtrack_enabled,
             backtrack_rounds=args.backtrack_rounds,
-            backtrack_steps=args.backtrack_steps)
+            backtrack_steps=args.backtrack_steps,
+            crossing_order=args.crossing_order,
+            crossing_map=args.crossing_map)
 
 
 if __name__ == "__main__":
