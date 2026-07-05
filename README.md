@@ -21,7 +21,7 @@ same component can be followed across a branching exploration.
 - **Continuity fallback:** the scripts still run without Sage/SnapPy, but Jones
   polynomials and SnapPy-based colour matching are unavailable.
 
-Version-specific details are in [README_V3_4.txt](README_V3_4.txt).
+Development notes and version history are in [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md).
 
 ## Repository Layout
 
@@ -33,7 +33,7 @@ check_two_dt.py                  Standalone SnapPy/Sage DT-comparison utility
 assets/strand_passage_icon.png   Optional window/task-menu icon
 bin/strand-passage               Convenience launcher
 requirements.txt                 Python package notes
-README_V3_4.txt                  Versioned usage notes and changelog
+DEVELOPMENT_LOG.md               Development notes and version history
 LICENSE                          MIT license
 ```
 
@@ -92,6 +92,24 @@ sage -python strand_passage_guiV3_4.py --nongui \
   --dt "DT: [(-8,-12,16),(-24,-22,-28,-26),(-10,-14,-2),(-20,-6,-18,-4)]" \
   --out strand_passage_results.xlsx
 ```
+
+In `--nongui` mode, `--out` controls both output files. If you set:
+
+```text
+--out /path/to/name.xlsx
+```
+
+the script writes:
+
+```text
+/path/to/name.xlsx
+/path/to/name_overview.svg
+```
+
+If the path does not end in `.xlsx`, the script adds it first. For example,
+`--out results/run1` writes `results/run1.xlsx` and
+`results/run1_overview.svg`. To choose the SVG directory and basename, choose the
+directory and basename of the spreadsheet path.
 
 Headless cascade figure:
 

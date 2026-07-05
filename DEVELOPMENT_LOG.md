@@ -1,5 +1,8 @@
-strand_passage_v3_4_bundle
-==========================
+Strand-Passage Explorer Development Log
+=======================================
+
+This file records version-specific development notes and implementation history.
+For installation and everyday usage, see README.md.
 
 Interactive strand-passage explorer with component-colour preservation, plus a
 non-interactive spreadsheet mode.  Every crossing you click opens a NEW WINDOW
@@ -15,7 +18,7 @@ Files
                                       DT codes (topology + Jones + backtrack test)
     assets/strand_passage_icon.png    optional Tk window/task-menu icon
     bin/strand-passage                convenience launcher
-    README_V3_4.txt
+    DEVELOPMENT_LOG.md
 
 --nongui outputs
 ----------------
