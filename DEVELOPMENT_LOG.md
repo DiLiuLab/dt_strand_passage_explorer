@@ -63,6 +63,10 @@ What is new in V3.4 (GitHub packaging + icon)
     exact DT code shown/drawn and used for the next passage step. This avoids
     mismatches when a transient SnapPy simplified object and its exported
     DT_code do not round-trip with identical Jones values.
+  * --nongui spreadsheets now also report hidden split unknots omitted by a
+    SnapPy DT export.  In that case `Jones_polynomial` remains the polynomial of
+    the visible `DT_code_chosen`, while `topological_Jones_polynomial` keeps the
+    SnapPy simplified-link polynomial with the split-circle factor included.
 
 
 What is new in V3.3 (backtrack-assisted simplification)

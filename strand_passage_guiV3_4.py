@@ -462,15 +462,30 @@ def strand_passage_nongui(snappy, dt_code, orig_components=None,
             direct_crossings = _crossing_count(new_dt)
 
             chosen_code = new_dt  # default: keep direct after-passage DT
+            direct_components = None
+            visible_components = None
+            topological_components = None
+            hidden_split_unknots = 0
+            topological_jones = "None"
             try:
                 new_link = snappy.Link(direct_str)
+                direct_components = len(new_link.link_components)
                 new_link = E.backtrack_simplify(
                     snappy, new_link, mode='global',
                     rounds=backtrack_rounds, steps=backtrack_steps)
                 new_components = len(new_link.link_components)
+                visible_components = new_components
+                topological_components = direct_components
+                if direct_components is not None:
+                    hidden_split_unknots = max(
+                        0, int(direct_components) - int(visible_components))
                 snappy_crossings = len(new_link.crossings)
                 simplified_code = _normalize_dt_code(new_link.DT_code())
                 simplified_str = str(simplified_code)
+                try:
+                    topological_jones = str(new_link.jones_polynomial())
+                except Exception:  # noqa: BLE001
+                    topological_jones = "None"
 
                 # V3.2 choice rule: SnapPy only if STRICTLY fewer crossings.
                 if snappy_crossings < direct_crossings:
@@ -488,7 +503,13 @@ def strand_passage_nongui(snappy, dt_code, orig_components=None,
                 # Outcome category (kept from the original script; compares the
                 # SnapPy-simplified result against the original simplified link).
                 cat_parts = []
-                if new_components < orig_components:
+                if hidden_split_unknots:
+                    noun = "unknot" if hidden_split_unknots == 1 else "unknots"
+                    cat_parts.append(
+                        "visible DT omits %s split %s (%s -> %s visible components)"
+                        % (hidden_split_unknots, noun,
+                           direct_components, visible_components))
+                elif new_components < orig_components:
                     cat_parts.append('fewer components (%s -> %s)'
                                      % (orig_components, new_components))
                 if snappy_crossings < orig_crossings:
@@ -510,6 +531,7 @@ def strand_passage_nongui(snappy, dt_code, orig_components=None,
                 chosen_crossings = direct_crossings
                 chosen_code = new_dt
                 chosen_jones = _jones_for_dt(snappy, chosen_code)
+                topological_jones = str(chosen_jones)
                 category = 'error: %s' % exc
 
             results.append({
@@ -523,8 +545,13 @@ def strand_passage_nongui(snappy, dt_code, orig_components=None,
                 'snappy_crossings': snappy_crossings,
                 'chosen_crossings': chosen_crossings,
                 'Jones_polynomial': str(chosen_jones),
+                'topological_Jones_polynomial': str(topological_jones),
                 'orig_components': orig_components,
+                'direct_components': direct_components,
                 'new_components': new_components,
+                'visible_components': visible_components,
+                'topological_components': topological_components,
+                'hidden_split_unknots': hidden_split_unknots,
                 'orig_crossings': orig_crossings,
                 'new_crossings': snappy_crossings,
                 'outcome': category,

@@ -111,6 +111,20 @@ If the path does not end in `.xlsx`, the script adds it first. For example,
 `results/run1_overview.svg`. To choose the SVG directory and basename, choose the
 directory and basename of the spreadsheet path.
 
+Spreadsheet columns to know:
+
+- `DT_code_chosen` is the visible DT code used for the drawn structure and for
+  any next passage step.
+- `Jones_polynomial` is computed from that exact visible DT code, so pasting
+  `DT_code_chosen` into Sage/SnapPy should give the same polynomial.
+- `topological_Jones_polynomial` records the SnapPy simplified link object
+  before its visible DT export. When `hidden_split_unknots` is greater than
+  zero, this polynomial includes the extra split-circle factor, while
+  `Jones_polynomial` describes the crossing-bearing DT code that can be drawn.
+- `visible_components` is the component count in the exported/drawn DT code.
+  `topological_components` is the component count before any zero-crossing
+  split unknots are omitted from the DT export.
+
 Headless cascade figure:
 
 ```bash
