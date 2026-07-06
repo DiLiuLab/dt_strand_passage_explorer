@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-strand_passage_guiV3_7.py  (V3.7)
+strand_passage_guiV3_8.py  (V3.8)
 =================================
 
 Interactive strand-passage explorer with component-colour preservation.
+
+What is new in V3.8
+-------------------
+* ``--nongui`` overview SVG layout now gives editable text more breathing room:
+  overview text is set to Arial before figure construction, card/footer panels
+  are slightly roomier, and text-background boxes have larger padding so the
+  final SVG better matches the Matplotlib-rendered view in Illustrator.
+* Drawing/model layer is now ``draw_dt_original_labelsV3_12.py``; its editable
+  SVG text boxes/circles also use Arial and larger padding by default.
 
 What is new in V3.7
 -------------------
@@ -40,8 +49,8 @@ What is new in V3.4
 * Optional Tk window/task-menu icon loaded from ``assets/strand_passage_icon.png``
   when present.  Missing or unsupported icon assets are ignored, so the scripts
   still run from a plain source checkout.
-* Drawing/model layer is now ``draw_dt_original_labelsV3_11.py`` (via
-  ``link_engine_v3_7.py``).
+* Drawing/model layer is now ``draw_dt_original_labelsV3_12.py`` (via
+  ``link_engine_v3_8.py``).
 
 What is new in V3.3
 -------------------
@@ -57,8 +66,8 @@ What is new in V3.3
 
 What is new in V3.2
 -------------------
-* Drawing/model layer is now ``draw_dt_original_labelsV3_11.py`` (via
-  ``link_engine_v3_7.py``), and 2-D links are drawn with that helper's own
+* Drawing/model layer is now ``draw_dt_original_labelsV3_12.py`` (via
+  ``link_engine_v3_8.py``), and 2-D links are drawn with that helper's own
   DEFAULT settings (default layout, top-to-bottom orientation, false-crossing
   audit with a planar fallback).
 * DT-code choice rule, applied everywhere (GUI and ``--nongui`` spreadsheet):
@@ -87,17 +96,17 @@ What is new in V3.2
   operation order; topologically identical structures are merged into one card.
 
 Non-interactive spreadsheet (behaves like the old strand_pass_sage.py):
-    sage -python strand_passage_guiV3_7.py --nongui \
+    sage -python strand_passage_guiV3_8.py --nongui \
         --dt "DT: [(-8,-12,16),(-24,-22,-28,-26),(-10,-14,-2),(-20,-6,-18,-4)]" \
         --out strand_passage_results.xlsx
 
 Interactive run:
-    sage -python strand_passage_guiV3_7.py                 # SnapPy enabled
-    sage -python strand_passage_guiV3_7.py --dt "DT: [(4,6,2)]"
-    python3 strand_passage_guiV3_7.py --gui-backend agg    # if TkAgg won't load
+    sage -python strand_passage_guiV3_8.py                 # SnapPy enabled
+    sage -python strand_passage_guiV3_8.py --dt "DT: [(4,6,2)]"
+    python3 strand_passage_guiV3_8.py --gui-backend agg    # if TkAgg won't load
 
 Headless cascade figure (no display needed):
-    python3 strand_passage_guiV3_7.py --dt "DT: [(4,6,2)]" --demo 2 1 --out chain.png
+    python3 strand_passage_guiV3_8.py --dt "DT: [(4,6,2)]" --demo 2 1 --out chain.png
 """
 
 from __future__ import annotations
@@ -117,14 +126,17 @@ import numpy as np
 # backend so Sage/macOS never fails before the GUI's own backend fallback runs.
 os.environ.setdefault("MPLBACKEND", "Agg")
 
-import draw_dt_original_labelsV3_11 as D          # noqa: E402
-import link_engine_v3_7 as E                       # noqa: E402
+import draw_dt_original_labelsV3_12 as D          # noqa: E402
+import link_engine_v3_8 as E                       # noqa: E402
 
 TAB10_NAMES = ["blue", "orange", "green", "red", "purple",
                "brown", "pink", "gray", "olive", "cyan"]
 DEFAULT_DT = "DT: [(-8,-12,16),(-24,-22,-28,-26),(-10,-14,-2),(-20,-6,-18,-4)]"
-VERSION = "3.7"
+VERSION = "3.8"
 OVERVIEW_FONT_FAMILY = "Arial"
+OVERVIEW_TEXT_BOX_PAD = 0.42
+OVERVIEW_DIAGRAM_DT_LABEL_BOX_PAD = 0.22
+OVERVIEW_DIAGRAM_CROSSING_ID_BOX_PAD = 0.28
 NONGUI_SECOND_PASS_CRITERION = (
     "first-step new_components > 2 and DT_code_chosen is available")
 DEFAULT_BACKTRACK_ROUNDS = getattr(E, "DEFAULT_BACKTRACK_ROUNDS", 200)
@@ -227,7 +239,7 @@ def warn_if_no_sage():
         "[warning] Not running under Sage: Jones polynomials (and the SnapPy "
         "invariant colour-matching that relies on them) cannot be computed. "
         "For full functionality run this with 'sage -python "
-        "strand_passage_guiV3_7.py ...'.\n")
+        "strand_passage_guiV3_8.py ...'.\n")
 
 
 # --------------------------------------------------------------------------- #
@@ -962,6 +974,31 @@ def _outcome_style(node, original_crossings):
     return ("#6b7280", "#f9fafb", "same crossings")
 
 
+def _expand_overview_diagram_label_boxes(ax):
+    """Give helper-rendered DT/crossing label boxes room in editable SVG."""
+    for text_artist in getattr(ax, "texts", []):
+        try:
+            text_artist.set_fontfamily(OVERVIEW_FONT_FAMILY)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            bbox_patch = text_artist.get_bbox_patch()
+        except Exception:  # noqa: BLE001
+            bbox_patch = None
+        if bbox_patch is None:
+            continue
+        try:
+            style_name = type(bbox_patch.get_boxstyle()).__name__.lower()
+            if "circle" in style_name:
+                bbox_patch.set_boxstyle(
+                    "circle,pad=%s" % OVERVIEW_DIAGRAM_CROSSING_ID_BOX_PAD)
+            else:
+                bbox_patch.set_boxstyle(
+                    "round,pad=%s" % OVERVIEW_DIAGRAM_DT_LABEL_BOX_PAD)
+        except Exception:  # noqa: BLE001
+            pass
+
+
 # Distinct, readable arrow colours (cycled per edge); each arrow's label is
 # drawn in the same colour so they are easy to pair up.
 ARROW_COLORS = [
@@ -992,6 +1029,13 @@ def render_overview_svg(nodes, edges, out_path, negative_even="over",
     import matplotlib as mpl
     import matplotlib.pyplot as plt
     from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+
+    # Use the same common font while measuring/drawing and while saving.  If
+    # the final SVG asks Illustrator for Arial but Matplotlib measured with a
+    # different font, editable text can look slightly too large for its boxes.
+    mpl.rcParams["font.family"] = OVERVIEW_FONT_FAMILY
+    mpl.rcParams["font.sans-serif"] = [OVERVIEW_FONT_FAMILY]
+    mpl.rcParams["font.monospace"] = [OVERVIEW_FONT_FAMILY]
 
     depths = [0, 1, 2]
     by_depth = {d: sorted((n for n in nodes if n["depth"] == d),
@@ -1038,21 +1082,23 @@ def render_overview_svg(nodes, edges, out_path, negative_even="over",
                  ha="left", va="center", color="white", fontsize=14,
                  fontweight="bold", zorder=2)
     overlay.text(0.016, 0.960, sim_info, ha="left", va="center",
-                 color="#93c5fd", fontsize=8.5, family="monospace", zorder=2)
+                 color="#93c5fd", fontsize=8.5,
+                 family=OVERVIEW_FONT_FAMILY, zorder=2)
     if title_dt:
         overlay.text(0.986, 0.978, "start  %s" % _short_text(title_dt, 66),
                      ha="right", va="center", color="#cbd5e1", fontsize=9,
-                     family="monospace", zorder=2)
+                     family=OVERVIEW_FONT_FAMILY, zorder=2)
     overlay.text(0.986, 0.960, "%d structures, %d passages"
                  % (len(nodes), len(edges)), ha="right", va="center",
-                 color="#cbd5e1", fontsize=8.5, family="monospace", zorder=2)
+                 color="#cbd5e1", fontsize=8.5,
+                 family=OVERVIEW_FONT_FAMILY, zorder=2)
 
     # ---- column banners + geometry (wide separation) -------------------------
     banners = {0: ("Original", "#1d4ed8"),
                1: ("After 1st strand passage", "#0f766e"),
                2: ("After 2nd strand passage", "#7c3aed")}
     col_cx = {0: 0.155, 1: 0.5, 2: 0.845}
-    box_w = 0.28
+    box_w = 0.30
     top, bottom = 0.885, 0.05
     for d in depths:
         label, colour = banners[d]
@@ -1072,7 +1118,7 @@ def render_overview_svg(nodes, edges, out_path, negative_even="over",
     # in the middle and the figure looks symmetric.
     node_pos = {}   # id -> (cx, card_cy, card_w, card_h)
     row_pitch = (top - bottom) / max(max_rows, 1)
-    card_h = row_pitch * 0.92
+    card_h = row_pitch * 0.96
     v_center = 0.5 * (top + bottom)
     for d in depths:
         col = by_depth[d]
@@ -1122,6 +1168,7 @@ def render_overview_svg(nodes, edges, out_path, negative_even="over",
             _apply_crossing_display_options(
                 diag, crossing_order, crossing_map, strict=False)
             E.render(diag, ax, show_crossing_ids=True, show_dt_labels=True)
+            _expand_overview_diagram_label_boxes(ax)
         except Exception as exc:  # noqa: BLE001
             ax.axis("off")
             ax.text(0.5, 0.5, "draw error:\n%s" % exc, ha="center",
@@ -1133,7 +1180,8 @@ def render_overview_svg(nodes, edges, out_path, negative_even="over",
         cap = "%s\n\ncrossings: %d      components: %d\n\n%s" % (
             dt_wrapped, n["n_crossings"], n["n_components"], jones_wrapped)
         overlay.text(cx, cy - bh / 2 + bh * 0.30, cap, ha="center", va="top",
-                     fontsize=8.6, zorder=6, family="monospace", color="#111827",
+                     fontsize=8.6, zorder=6, family=OVERVIEW_FONT_FAMILY,
+                     color="#111827",
                      linespacing=1.3)
 
     # ---- arrows LAST, on a dedicated top layer, as STRAIGHT lines ------------
@@ -1178,7 +1226,8 @@ def render_overview_svg(nodes, edges, out_path, negative_even="over",
                 text = textwrap.fill(text, width=11)
             arrow_ax.text(lx, ly, text, ha="center", va="center", fontsize=7.4,
                           zorder=22, color=colour, fontweight="bold",
-                          bbox=dict(boxstyle="round,pad=0.2", fc="white",
+                          bbox=dict(boxstyle="round,pad=%s"
+                                    % OVERVIEW_TEXT_BOX_PAD, fc="white",
                                     ec=colour, lw=1.1, alpha=0.97))
 
     # ---- footer legend -------------------------------------------------------
@@ -1193,7 +1242,8 @@ def render_overview_svg(nodes, edges, out_path, negative_even="over",
               "drawn in the same colour.")
     overlay.text(0.5, 0.026, legend, ha="center", va="center", fontsize=8.0,
                  color="#374151", zorder=4, wrap=True,
-                 bbox=dict(boxstyle="round,pad=0.4", fc="#f3f4f6", ec="#d1d5db"))
+                 bbox=dict(boxstyle="round,pad=0.65",
+                           fc="#f3f4f6", ec="#d1d5db"))
 
     # Illustrator-friendly SVG: keep labels editable as real SVG <text> while
     # using Arial throughout the overview to avoid most font-substitution
@@ -1910,7 +1960,7 @@ def run_gui(dt_string=None, negative_even="over", use_snappy_global=True,
 # --------------------------------------------------------------------------- #
 def main():
     ap = argparse.ArgumentParser(
-        prog="strand_passage_guiV3_7.py",
+        prog="strand_passage_guiV3_8.py",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
             "Strand passage explorer V%s\n"
@@ -1927,17 +1977,17 @@ def main():
             % VERSION),
         epilog=(
             "examples:\n"
-            "  sage -python strand_passage_guiV3_7.py\n"
-            "  sage -python strand_passage_guiV3_7.py --dt \"DT: [(4,6,2)]\"\n"
-            "  sage -python strand_passage_guiV3_7.py --backtrack "
+            "  sage -python strand_passage_guiV3_8.py\n"
+            "  sage -python strand_passage_guiV3_8.py --dt \"DT: [(4,6,2)]\"\n"
+            "  sage -python strand_passage_guiV3_8.py --backtrack "
             "--backtrack-rounds 50 --backtrack-steps 25\n"
-            "  sage -python strand_passage_guiV3_7.py --nongui \\\n"
+            "  sage -python strand_passage_guiV3_8.py --nongui \\\n"
             "       --dt \"DT: [(-8,-12,16),(-24,-22,-28,-26),(-10,-14,-2),"
             "(-20,-6,-18,-4)]\" \\\n"
             "       --out results.xlsx --backtrack --backtrack-rounds 50\n"
-            "  python3 strand_passage_guiV3_7.py --dt \"DT: [(4,6,2)]\" "
+            "  python3 strand_passage_guiV3_8.py --dt \"DT: [(4,6,2)]\" "
             "--demo 2 1 --out chain.png\n"
-            "  python3 strand_passage_guiV3_7.py --gui-backend agg   "
+            "  python3 strand_passage_guiV3_8.py --gui-backend agg   "
             "# if TkAgg won't load\n"))
     ap.add_argument("--dt", default=None, metavar="STR",
                     help="signed DT code string, e.g. \"DT: [(4,6,2)]\" "
@@ -1968,10 +2018,10 @@ def main():
                          "do not combine with --crossing-order")
     ap.add_argument("--backtrack", action="store_true",
                     help="(kept for compatibility; backtrack is ON by default "
-                         "in V3.7 -- use --no-backtrack to disable)")
+                         "in V3.8 -- use --no-backtrack to disable)")
     ap.add_argument("--no-backtrack", action="store_true",
                     help="disable backtrack-assisted SnapPy simplification "
-                         "(V3.7 enables it by default)")
+                         "(V3.8 enables it by default)")
     ap.add_argument("--backtrack-rounds", type=int, metavar="N",
                     default=DEFAULT_BACKTRACK_ROUNDS,
                     help="backtrack rounds (default %d)"
@@ -1983,7 +2033,7 @@ def main():
     args = ap.parse_args()
 
     use_snappy_global = not args.no_snappy_global
-    backtrack_enabled = not args.no_backtrack           # ON by default (V3.7)
+    backtrack_enabled = not args.no_backtrack           # ON by default (V3.8)
     backtrack_rounds = args.backtrack_rounds if backtrack_enabled else 0
     backtrack_steps = args.backtrack_steps
 
@@ -2003,7 +2053,7 @@ def main():
 
     if args.demo is not None:
         dt = args.dt or "DT: [(4,6,2)]"
-        out = args.out or "strand_passage_chain_v3_7.png"
+        out = args.out or "strand_passage_chain_v3_8.png"
         render_chain(dt, args.demo, out, negative_even=args.negative_even,
                      use_snappy_global=use_snappy_global,
                      backtrack_rounds=backtrack_rounds,

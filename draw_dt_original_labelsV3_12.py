@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-draw_dt_original_labelsV3_11.py
+draw_dt_original_labelsV3_12.py
 ===============================
 
 Draw a smooth planar oriented link diagram from a signed Dowker-Thistlethwaite
 (DT) code while preserving the original traversal labels supplied by the user.
+
+V3.12 changes
+-------------
+* Editable SVG/PDF text now uses Arial consistently during preview rendering and
+  file export, reducing font-metric differences when the result is opened in
+  Illustrator.
+* DT traversal-label boxes and crossing-ID circles have larger default padding,
+  so their outlines do not look too tight around editable text in the final SVG.
 
 V3.11 changes
 -------------
@@ -53,7 +61,7 @@ Outputs:
   and a spherical XYZ coordinate file with blank lines between components.
 
 Example:
-  python draw_dt_original_labelsV3_11.py \
+  python draw_dt_original_labelsV3_12.py \
     --dt 'DT: [(-8,-12,16),(-24,-22,-28,-26),(-10,-14,-2),(-20,-6,-18,-4)]' \
     --output example_v3.svg \
     --table example_v3.csv \
@@ -88,6 +96,12 @@ if not (len(sys.argv) == 1 or "--gui" in sys.argv):
 matplotlib.rcParams["svg.fonttype"] = "none"
 matplotlib.rcParams["pdf.fonttype"] = 42
 matplotlib.rcParams["ps.fonttype"] = 42
+DIAGRAM_FONT_FAMILY = "Arial"
+DT_LABEL_BOX_PAD = 0.22
+CROSSING_ID_BOX_PAD = 0.28
+matplotlib.rcParams["font.family"] = DIAGRAM_FONT_FAMILY
+matplotlib.rcParams["font.sans-serif"] = [DIAGRAM_FONT_FAMILY]
+matplotlib.rcParams["font.monospace"] = [DIAGRAM_FONT_FAMILY]
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_agg import FigureCanvasAgg
@@ -1147,6 +1161,9 @@ def render_diagram(
     lw=2.0,
     label_fontsize=7.0,
     crossing_id_fontsize=6.0,
+    label_box_pad=DT_LABEL_BOX_PAD,
+    crossing_id_box_pad=CROSSING_ID_BOX_PAD,
+    font_family=DIAGRAM_FONT_FAMILY,
     arrows=True,
     origin=(0.0, 0.0),
     scale_to=None,
@@ -1279,8 +1296,10 @@ def render_diagram(
                 va="center",
                 zorder=7,
                 fontweight="bold",
+                fontfamily=font_family,
                 clip_on=False,
-                bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.70),
+                bbox=dict(boxstyle="round,pad=%s" % label_box_pad,
+                          fc="white", ec="none", alpha=0.70),
             )
             entry = dict(spec)
             entry["artist"] = artist
@@ -1308,8 +1327,10 @@ def render_diagram(
                 va="center",
                 zorder=5,
                 fontweight="bold" if color_crossing_ids_by_overstrand else "normal",
+                fontfamily=font_family,
                 clip_on=False,
-                bbox=dict(boxstyle="circle,pad=0.15", fc="white", ec=edge_color, alpha=0.78),
+                bbox=dict(boxstyle="circle,pad=%s" % crossing_id_box_pad,
+                          fc="white", ec=edge_color, alpha=0.78),
             )
             crossing_id_entries.append({"artist": artist, "center": cxy, "crossing_index": k})
 
@@ -1383,7 +1404,7 @@ def draw(
     ax.set_aspect("equal")
     ax.axis("off")
     if title:
-        ax.set_title(title, fontsize=11)
+        ax.set_title(title, fontsize=11, fontfamily=DIAGRAM_FONT_FAMILY)
     _maximize_axis_in_figure(ax, has_title=bool(title))
     _tighten_axis_to_content(ax, pad_frac=0.08)
     _disable_figure_clipping(fig)
@@ -2398,7 +2419,7 @@ def _open_xyz_viewer_window(parent, xyz_components, closed=True, title="Sphere X
     ax3.set_xlabel("X")
     ax3.set_ylabel("Y")
     ax3.set_zlabel("Z")
-    ax3.set_title(title)
+    ax3.set_title(title, fontfamily=DIAGRAM_FONT_FAMILY)
     ax3.legend(loc="best")
 
     plot_frame = ttk.Frame(top)
@@ -2613,7 +2634,7 @@ def render_prepared_diagram(ax, data, args):
     ax.set_aspect("equal")
     ax.axis("off")
     if args.title:
-        ax.set_title(args.title, fontsize=11)
+        ax.set_title(args.title, fontsize=11, fontfamily=DIAGRAM_FONT_FAMILY)
     _maximize_axis_in_figure(ax, has_title=bool(args.title))
     _tighten_axis_to_content(ax, pad_frac=0.08)
     _disable_figure_clipping(ax.figure)
@@ -2676,7 +2697,7 @@ def render_figure(
     ax.set_aspect("equal")
     ax.axis("off")
     if title:
-        ax.set_title(title, fontsize=11)
+        ax.set_title(title, fontsize=11, fontfamily=DIAGRAM_FONT_FAMILY)
     _maximize_axis_in_figure(ax, has_title=bool(title))
     _tighten_axis_to_content(ax, pad_frac=0.08)
     _disable_figure_clipping(fig)
@@ -3062,7 +3083,7 @@ def run_gui(initial_args):
         return 1
 
     apply_tk_window_icon(root, tk)
-    root.title("draw_dt_original_labelsV3_11")
+    root.title("draw_dt_original_labelsV3_12")
     root.geometry("1320x860")
     root.minsize(1050, 680)
 

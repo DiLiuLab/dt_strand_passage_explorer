@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-link_engine_v3_7.py  (V3.7)
+link_engine_v3_8.py  (V3.8)
 ======================
 
 Link-diagram engine for strand-passage experiments.
+
+What is new in V3.8
+-------------------
+* Version-aligned engine module for ``strand_passage_guiV3_8.py``.  The engine
+  behavior is unchanged from V3.7; V3.8 imports the V3.12 drawing helper, whose
+  editable SVG label boxes/circles use Arial and larger padding.
 
 What is new in V3.7
 -------------------
@@ -26,7 +32,7 @@ What is new in V3.5
 
 What is new in V3.4
 -------------------
-* Imports ``draw_dt_original_labelsV3_11.py``, whose standalone GUI can use the
+* Imports ``draw_dt_original_labelsV3_12.py``, whose standalone GUI can use the
   optional project icon asset without requiring it at runtime.
 
 Design
@@ -46,7 +52,7 @@ strand-continuity labelling, so the two paths never disagree.
 
 What is new in V3.2
 -------------------
-* Drawing backend is now ``draw_dt_original_labelsV3_11.py``.
+* Drawing backend is now ``draw_dt_original_labelsV3_12.py``.
 * ``render`` follows the drawing helper's own default 2-D layout pipeline
   (default layout, top-to-bottom orientation, and the false-crossing audit that
   falls back to a planar layout) so 2-D links look exactly as the standalone
@@ -69,7 +75,7 @@ What is new in V3.3
 
 Drawing backend
 ---------------
-V3.7 imports ``draw_dt_original_labelsV3_11.py`` for the 2-D DT
+V3.8 imports ``draw_dt_original_labelsV3_12.py`` for the 2-D DT
 parser/model/layout/render helpers.
 """
 
@@ -87,10 +93,10 @@ import networkx as nx
 
 # Keep pyplot import from selecting a fragile GUI backend under Sage.
 os.environ.setdefault("MPLBACKEND", "Agg")
-import draw_dt_original_labelsV3_11 as D
+import draw_dt_original_labelsV3_12 as D
 
-VERSION = "3.7"
-DRAWING_MODULE_NAME = getattr(D, "__name__", "draw_dt_original_labelsV3_11")
+VERSION = "3.8"
+DRAWING_MODULE_NAME = getattr(D, "__name__", "draw_dt_original_labelsV3_12")
 
 # Defaults for the backtrack-assisted SnapPy simplification (ON by default in
 # the GUI and --nongui as of V3.3).
@@ -98,7 +104,7 @@ DEFAULT_BACKTRACK_ROUNDS = 200
 DEFAULT_BACKTRACK_STEPS = 30
 
 # 2-D drawing defaults: mirror the standalone helper so V3.2 draws links exactly
-# as ``draw_dt_original_labelsV3_11.py`` does by default.  These fall back to the
+# as ``draw_dt_original_labelsV3_12.py`` does by default.  These fall back to the
 # helper's own module-level constants when present.
 DEFAULT_LAYOUT = getattr(D, "DEFAULT_LAYOUT", "tutte")
 DEFAULT_Y_DIRECTION = getattr(D, "DEFAULT_Y_DIRECTION", "top-to-bottom")
@@ -116,7 +122,7 @@ def dt_to_string(dt_code: Sequence[Sequence[int]]) -> str:
 def parse_dt_any(value: Any) -> List[Tuple[int, ...]]:
     """Parse DT text or normalize an already materialized DT object.
 
-    ``draw_dt_original_labelsV3_11.parse_dt`` is the parser for user text.  The
+    ``draw_dt_original_labelsV3_12.parse_dt`` is the parser for user text.  The
     SnapPy global branch can also receive list/tuple-like objects from
     ``DT_code()``, so this wrapper normalizes those objects without importing any
     other drawing module.
@@ -524,7 +530,7 @@ def color_for(global_comp_index, palette=None):
 def _layout_like_helper(model, G):
     """Lay out one block exactly as the drawing helper's default 2-D pipeline.
 
-    This mirrors ``draw_dt_original_labelsV3_11.prepare_diagram``: compute the
+    This mirrors ``draw_dt_original_labelsV3_12.prepare_diagram``: compute the
     helper's default layout, apply its default top-to-bottom orientation and
     rotation, then run the false-crossing audit and fall back to a planar layout
     when the default one produced apparent (false) crossings.  Using the helper's

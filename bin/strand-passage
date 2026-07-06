@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-APP="${PROJECT_DIR}/strand_passage_guiV3_7.py"
+APP="${PROJECT_DIR}/strand_passage_guiV3_8.py"
 
 if command -v sage >/dev/null 2>&1; then
   exec sage -python "${APP}" "$@"

@@ -7,7 +7,7 @@
 # SnapPy running inside Sage, and on the maintainer's macOS setup SnapPy is
 # provided by the Sage install, not by pip. Run the tool as:
 #
-#   sage -python strand_passage_guiV3_7.py ...
+#   sage -python strand_passage_guiV3_8.py ...
 #
 # Without Sage/SnapPy the app still runs on the continuity engine only and warns
 # that Jones polynomials are unavailable. `tkinter` (GUI) ships with CPython.

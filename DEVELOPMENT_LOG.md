@@ -11,9 +11,9 @@ so passages chain (and may branch) across as many windows as you like.
 
 Files
 -----
-    strand_passage_guiV3_7.py         (V3.7) interactive GUI + --nongui + --demo
-    link_engine_v3_7.py               (V3.7) passage / DT-choice / SnapPy engine
-    draw_dt_original_labelsV3_11.py   (V3.11) drawing + model layer
+    strand_passage_guiV3_8.py         (V3.8) interactive GUI + --nongui + --demo
+    link_engine_v3_8.py               (V3.8) passage / DT-choice / SnapPy engine
+    draw_dt_original_labelsV3_12.py   (V3.12) drawing + model layer
     check_two_dt.py                   standalone SnapPy/Sage utility: compare two
                                       DT codes (topology + Jones + backtrack test)
     find_link_in_snappy.py            standalone SnapPy database search utility
@@ -29,25 +29,25 @@ Files
 
 Run
 ---
-    sage -python strand_passage_guiV3_7.py                     # SnapPy enabled
-    sage -python strand_passage_guiV3_7.py --dt "DT: [(4,6,2)]"
-    python3 strand_passage_guiV3_7.py --gui-backend agg        # if TkAgg won't load
+    sage -python strand_passage_guiV3_8.py                     # SnapPy enabled
+    sage -python strand_passage_guiV3_8.py --dt "DT: [(4,6,2)]"
+    python3 strand_passage_guiV3_8.py --gui-backend agg        # if TkAgg won't load
     ./bin/strand-passage --help                                # launcher
 
 Backtrack-assisted simplification (ON by default: 200 rounds, 30 steps):
-    sage -python strand_passage_guiV3_7.py                     # backtrack ON
-    sage -python strand_passage_guiV3_7.py --backtrack-rounds 400
-    sage -python strand_passage_guiV3_7.py --no-backtrack      # turn it OFF
+    sage -python strand_passage_guiV3_8.py                     # backtrack ON
+    sage -python strand_passage_guiV3_8.py --backtrack-rounds 400
+    sage -python strand_passage_guiV3_8.py --no-backtrack      # turn it OFF
     (in the GUI, the "Backtrack simplify" checkbox + rounds/steps fields start
      ON at 200/30 and can be toggled live between clicks.)
 
 Non-interactive two-pass spreadsheet:
-    sage -python strand_passage_guiV3_7.py --nongui \
+    sage -python strand_passage_guiV3_8.py --nongui \
         --dt "DT: [(-8,-12,16),(-24,-22,-28,-26),(-10,-14,-2),(-20,-6,-18,-4)]" \
         --out strand_passage_results.xlsx        # backtrack ON by default
 
 Headless cascade figure (no display needed):
-    python3 strand_passage_guiV3_7.py --dt "DT: [(4,6,2)]" --demo 2 1 --out chain.png
+    python3 strand_passage_guiV3_8.py --dt "DT: [(4,6,2)]" --demo 2 1 --out chain.png
 
 
 Utility update (SnapPy database search)
@@ -57,6 +57,22 @@ Utility update (SnapPy database search)
   * Search order is extended alphabetic DT with flips, exact numeric DT,
     optional loose numeric DT, then meridian-preserving exterior identification
     for hyperbolic links.  Output is a TSV table.
+
+
+What is new in V3.8 (overview SVG text-box sizing)
+--------------------------------------------------
+  * --nongui overview SVGs now apply Arial before the figure is measured and
+    drawn, instead of only immediately before saving the SVG.
+  * The overview card/header geometry is slightly roomier, and the arrow-label,
+    footer, DT-label, and crossing-ID text boxes/circles use larger padding.
+  * draw_dt_original_labelsV3_12.py makes the same font/padding adjustment for
+    standalone helper SVG/PDF exports, so the live helper preview and final SVG
+    are less likely to diverge in Illustrator.
+  * Font sizes still come from the GUI/CLI values: `DT label font` /
+    `--font-size` and `crossing ID font` / `--crossing-id-font-size`.
+  * This keeps text editable while reducing the mismatch where Illustrator could
+    display the final SVG text as slightly larger than the live Matplotlib view,
+    making the surrounding boxes/circles look too small.
 
 
 What is new in V3.7 (editable overview SVG text)
