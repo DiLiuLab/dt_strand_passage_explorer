@@ -125,6 +125,14 @@ sage -python strand_passage_guiV3_8.py \
   --crossing-order "c1 c3 c2"
 ```
 
+For the built-in 14-crossing example, the crossing-order CLI option can be set
+as:
+
+```bash
+sage -python strand_passage_guiV3_8.py \
+  --crossing-order "c1 c7 c14 c12 c3 c6 c9 c5 c11 c13 c4 c2 c10 c8"
+```
+
 `--crossing-order` lists displayed crossing IDs in odd-label order
 `1,3,5,...`.  Alternatively, use `--crossing-map "c1=1,c3=3,c2=5"`.
 In the GUI, the same controls are available as `Crossing order` and
