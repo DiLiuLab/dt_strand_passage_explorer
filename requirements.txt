@@ -1,4 +1,4 @@
-# Python dependencies for the Strand-Passage Explorer.
+# Python dependencies for DT Link Toolkit.
 #
 #   pip install -r requirements.txt
 #

@@ -965,7 +965,7 @@ def _run_info_rows(snappy, pandas_module, dt_string, dt_code, out_path,
     """Workbook metadata for reproducible nongui output."""
     return [
         ("created_at", datetime.now().astimezone().isoformat(timespec="seconds")),
-        ("software", "Strand-Passage Explorer"),
+        ("software", "DT Link Toolkit"),
         ("software_version", VERSION),
         ("entry_script", os.path.basename(sys.argv[0]) if sys.argv else ""),
         ("engine_module", getattr(E, "__name__", "unknown")),
@@ -1950,7 +1950,7 @@ class StrandPassageApp(object):
     # ---- root control strip ----
     def _build_root_controls(self, dt_string):
         tk, ttk = self.tk, self.ttk
-        self.root.title("Strand passage explorer V%s  -  click a crossing to "
+        self.root.title("DT Link Toolkit strand passage V%s  -  click a crossing to "
                         "branch a new window" % VERSION)
         controls = ttk.Frame(self.root, padding=6)
         controls.pack(side=tk.TOP, fill=tk.X)
@@ -2311,8 +2311,8 @@ def main():
         prog="strand_passage_guiV4_0.py",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
-            "Strand passage explorer V%s\n"
-            "-----------------------------\n"
+            "DT Link Toolkit strand passage V%s\n"
+            "-----------------------------------\n"
             "Interactive tool (and headless modes) for studying strand passages\n"
             "(crossing changes) on a knot/link given by a signed DT code, with\n"
             "component-colour preservation and an optional SnapPy backend.\n\n"

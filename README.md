@@ -1,8 +1,9 @@
-# DT Strand-Passage Explorer
+# DT Link Toolkit
 
-Strand-Passage Explorer is a research tool for studying **strand passages**
-(crossing changes) on knots and links given by a signed
-**Dowker-Thistlethwaite (DT) code**.
+DT Link Toolkit is a research toolkit for studying knots and links given by a
+signed **Dowker-Thistlethwaite (DT) code**. It includes strand-passage
+exploration, DT drawing, SnapPy/Sage comparison and database-search helpers, and
+diagram scoring.
 
 The main feature is component-colour preservation: the identity of each original
 link component is tracked through chained passages and simplifications, so the
@@ -57,6 +58,9 @@ cd dt_strand_passage_explorer
 
 `git clone` downloads the project into a new folder and sets `origin` to the
 GitHub repository, so future updates know where to come from.
+
+The repository slug remains `dt_strand_passage_explorer` for continuity, even
+though the project name is now DT Link Toolkit.
 
 Install the regular Python dependencies:
 

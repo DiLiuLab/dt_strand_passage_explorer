@@ -1,11 +1,12 @@
-Strand-Passage Explorer Development Log
-=======================================
+DT Link Toolkit Development Log
+===============================
 
 This file records version-specific development notes and implementation history.
 For installation and everyday usage, see README.md.
 
-Interactive strand-passage explorer with component-colour preservation, plus a
-non-interactive spreadsheet mode.  Every crossing you click opens a NEW WINDOW
+DT-code link toolkit with component-colour-preserving strand-passage
+exploration, drawing, SnapPy/Sage comparison and search utilities, and diagram
+scoring. Every crossing you click in the strand-passage GUI opens a NEW WINDOW
 showing the chosen after-passage topology; each new window is itself clickable,
 so passages chain (and may branch) across as many windows as you like.
 
