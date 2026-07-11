@@ -12,7 +12,7 @@ What is new in V4.0
 * The default 2-D drawing style for strand-passage views is now
   ``shaped-tutte`` with an ellipse boundary and manual aspect 1.0.
 * ``render`` accepts drawing-option dictionaries loaded from
-  ``draw_dt_original_labelsV5_3.py`` session files, so GUI, demo, and overview
+  ``draw_dt_original_labelsV5_4.py`` session files, so GUI, demo, and overview
   diagrams can share the helper's saved layout/line/gap/label settings.
 
 What is new in V3.7
@@ -35,7 +35,7 @@ What is new in V3.5
 
 What is new in V3.4
 -------------------
-* Imports ``draw_dt_original_labelsV5_3.py``, whose standalone GUI can use the
+* Imports ``draw_dt_original_labelsV5_4.py``, whose standalone GUI can use the
   optional project icon asset without requiring it at runtime.
 
 Design
@@ -55,7 +55,7 @@ strand-continuity labelling, so the two paths never disagree.
 
 What is new in V3.2
 -------------------
-* Drawing backend is now ``draw_dt_original_labelsV5_3.py``.
+* Drawing backend is now ``draw_dt_original_labelsV5_4.py``.
 * ``render`` follows the drawing helper's own default 2-D layout pipeline
   (default layout, top-to-bottom orientation, and false-crossing visualization)
   so 2-D links look exactly as the standalone helper draws them.
@@ -77,7 +77,7 @@ What is new in V3.3
 
 Drawing backend
 ---------------
-V4.0 imports ``draw_dt_original_labelsV5_3.py`` for the 2-D DT
+V4.0 imports ``draw_dt_original_labelsV5_4.py`` for the 2-D DT
 parser/model/layout/render helpers.
 """
 
@@ -95,10 +95,10 @@ import networkx as nx
 
 # Keep pyplot import from selecting a fragile GUI backend under Sage.
 os.environ.setdefault("MPLBACKEND", "Agg")
-import draw_dt_original_labelsV5_3 as D
+import draw_dt_original_labelsV5_4 as D
 
 VERSION = "4.0"
-DRAWING_MODULE_NAME = getattr(D, "__name__", "draw_dt_original_labelsV5_3")
+DRAWING_MODULE_NAME = getattr(D, "__name__", "draw_dt_original_labelsV5_4")
 
 # Defaults for the backtrack-assisted SnapPy simplification (ON by default in
 # the GUI and --nongui as of V3.3).
@@ -156,7 +156,7 @@ def dt_to_string(dt_code: Sequence[Sequence[int]]) -> str:
 def parse_dt_any(value: Any) -> List[Tuple[int, ...]]:
     """Parse DT text or normalize an already materialized DT object.
 
-    ``draw_dt_original_labelsV5_3.parse_dt`` is the parser for user text.  The
+    ``draw_dt_original_labelsV5_4.parse_dt`` is the parser for user text.  The
     SnapPy global branch can also receive list/tuple-like objects from
     ``DT_code()``, so this wrapper normalizes those objects without importing any
     other drawing module.
@@ -590,7 +590,7 @@ def _float_option(opts: Mapping[str, Any], key: str) -> float:
 def _layout_like_helper(model, G, drawing_options=None):
     """Lay out one block exactly as the drawing helper's default 2-D pipeline.
 
-    This mirrors ``draw_dt_original_labelsV5_3.prepare_diagram``: compute the
+    This mirrors ``draw_dt_original_labelsV5_4.prepare_diagram``: compute the
     requested layout, apply y-direction/rotation, and keep the requested layout
     even if it introduces false crossings.  The helper draws false crossings with
     local gap masks and warnings, so the engine must not silently replace the

@@ -1,11 +1,122 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-draw_dt_original_labelsV4_5.py
+draw_dt_original_labelsV5_4.py
 ==============================
 
 Draw a smooth planar oriented link diagram from a signed Dowker-Thistlethwaite
 (DT) code while preserving the original traversal labels supplied by the user.
+
+V5.4 changes
+------------
+* 3D XYZ CORRECTNESS: dense diagrams (e.g. the mirror chain and heavy chain
+  families) could render as the WRONG LINK: the kamada sphere layouts pinch
+  strands through each other and thread foreign crossings, invisibly to the
+  2D audits.  Three additions:
+  - '--sphere-layout stereo-safe': correct-by-construction 3D curve -- the
+    audited planar layout lifted stereographically with radial over/under
+    bumps and no position-moving smoothing (strands disjoint in 2D can never
+    intersect in 3D).  Use this whenever the audit flags a failure.
+  - automatic TOPOLOGY AUDIT after every xyz build (audit_xyz.py, same
+    folder; needs spherogram+snappy): rebuilds the link from the 3D curve
+    and verifies it is isometric to the DT link; prints [ok]/[FAIL] + hint,
+    while the GUI retains the result in its status log and 3D windows.
+  - clearance repair for the kamada layouts (--xyz-clearance /
+    --no-xyz-repair): separates non-crossing close approaches into extra
+    radial layers, pinch-coherently.
+* Previous V5.3 notes follow.
+* 3D projection surface wireframe is now configurable: 'grid density' (number
+  of meridians; parallels follow at about half; 0 hides the mesh -- needs
+  'Redraw 3D projection' since the mesh is built with the curve), and 'grid
+  color' / 'grid line width' (any matplotlib colour; applied live from the
+  cache).  CLI: --proj-grid-density / --proj-grid-color / --proj-grid-lw.
+* The neutral framework chords connecting the crossing anchors can be shown or
+  hidden independently of the wireframe ('framework chords' checkbox /
+  --proj-hide-chords), so the mapped shape can be shown as surface + anchors
+  only.
+* Mouse roll in the live projection window: RIGHT-drag (or Shift+left-drag)
+  rotates the image about the view axis, pivoting on the canvas centre --
+  complementing the left-drag azimuth/elevation rotation and wheel zoom.
+* Projection crossing anchor dots are now optional and hidden by default
+  ('crossing anchor dots' checkbox / --proj-crossing-dots).
+* The mapped-surface grid can be locked to the last projection rebuild view
+  while live orbit/roll rotates the strands ('fixed grid while rotating'
+  checkbox / --proj-fixed-grid).
+
+V5.2 changes
+------------
+* Mapped skeleton REDONE to match score_diagram's sphere panels: 'show mapped
+  skeleton' now renders the WHOLE mapped surface as a light depth-shaded
+  wireframe (the actual sphere / ellipsoid / cylinder / torus the strands ride
+  on, produced by passing a sphere grid through the same surface warp), plus a
+  NEUTRAL dark-gray framework of strand chords and black depth-faded crossing
+  anchors.  Component colours are reserved for the smooth strands, so the
+  overlay no longer doubles the colours (that was messy).
+* New 2D layout 'sphere-stereo' -- the creative route to a FLAT diagram for
+  links whose rings live in orthogonal planes (Edwards-Venn AM_n) and defeat
+  boundary-pinned layouts: the crossing graph is laid out on the unit sphere
+  (3D Kamada-Kawai directions + gadget compaction, as in the 3D pipeline), a
+  projection pole is searched that is farthest from every strand arc, and the
+  whole spherical diagram is STEREOGRAPHICALLY projected from that pole.  A
+  stereographic image of a spherical diagram is a genuine planar diagram, so
+  near-orthogonal rings land as clean overlapping ovals instead of collapsing
+  onto a pinned boundary.  Available in the GUI layout menu and --layout
+  sphere-stereo; combines with 'relax passes' / 'min separation'.
+
+V5.1 changes
+------------
+* 3D projection, for links whose rings lie in near-orthogonal planes (e.g. the
+  Edwards-Venn AM_n family, where every axis view leaves one ring edge-on):
+  - 'Auto view' (--proj-auto-view): searches the view sphere for the direction
+    that maximizes the WORST component's projected roundness (isoperimetric
+    ratio of its projected loop), i.e. the view where no ring degenerates to a
+    sliver.  Button in the 3D-view tab and the projection window.
+  - 'depth fade' (--proj-depth-fade, 0..1): score_diagram-style depth cueing --
+    nearer strand chunks are opaque, farther ones fade.  Applied to strands
+    and skeleton alike; makes front/back of an edge-on ring distinguishable.
+  - 'perspective' (--proj-perspective, 0 = orthographic, else camera distance
+    in scene radii, e.g. 2-4): foreshortening turns an edge-on ring into an
+    open lens instead of a flat line, like a real 3D viewer.
+* Mapped skeleton is now the WHOLE framework in the style of
+  score_diagramV2_0's sphere panels: every strand chord drawn as a smooth arc
+  through its connector anchor, in its component colour, with per-segment
+  depth transparency, plus depth-faded crossing anchor dots.  New 'skeleton
+  only' mode (--proj-skeleton-only) shows just this framework, which makes the
+  global SHAPE of a difficult link clear at a glance.
+* Projection window: mouse DRAG ROTATES the view (Chimera-like: horizontal
+  drag = azimuth, vertical = elevation; live fast redraw while dragging, full
+  halo render on release), and the scroll wheel zooms about the view centre.
+
+V5.0 changes
+------------
+* 2D, holed-tutte: new 'ring equalize' (--ring-equalize, 0..1).  The harmonic
+  (Tutte) solve compresses interior detail toward the pinned rims on large
+  diagrams (e.g. the 80-crossing closed fishtail), which is why strands crowd
+  at the boundary.  Ring equalize histogram-equalizes the crossings' radial
+  positions across the ring width (angles kept), spreading the strands evenly
+  between the rims.  1 = fully even.  Applied before invert-ring / ring-tilt.
+* 2D, all layouts: planarity-guarded relaxation ('relax passes' / 'relax
+  strength', --relax-passes / --relax-strength).  Each pass moves non-pinned
+  nodes toward their neighbours' centroid while equalizing incident edge
+  lengths, and is REJECTED (step halved) if it would introduce any
+  straight-edge crossing, so the layout stays planar by construction.  Evens
+  out crowded/stretched regions on difficult structures.
+* New '3D view' tab + persistent '3D projection' window: an illustrative 2D
+  orthographic projection of the 3D Sphere-XYZ curve, drawn depth-ordered with
+  white halos so nearer strands read as crossing over farther ones -- a
+  presentation method for links with no readable flat diagram (e.g. the
+  Edwards-Venn Brunnian links).  The expensive 3D construction runs only on
+  'Redraw 3D projection'; the quick-view buttons re-project the cached curve
+  instantly.
+* 3D view: optional 'mapped skeleton' overlay (crossing anchors of the sphere
+  layout + strand chords, warped like the curve, with optional crossing IDs)
+  to relate the 3D picture crossing-by-crossing to the 2D diagram.
+* 'Save projection(s)' writes selected views (current/top/front/side) as
+  SVG+PNG next to the XYZ file; 'Save XYZ' can include them automatically.
+  CLI: --save-projections, --proj-views, --proj-elev/azim/roll,
+  --proj-skeleton, --proj-skeleton-ids, --proj-line-width.
+* UI: 'View XYZ' moved to the '3D view' tab; save-button row decluttered;
+  sessions include all new parameters and still load V4.x session files.
 
 V4.5 changes
 ------------
@@ -234,7 +345,7 @@ Outputs:
   and a spherical XYZ coordinate file with blank lines between components.
 
 Example:
-  python draw_dt_original_labelsV4_5.py \
+  python draw_dt_original_labelsV5_4.py \
     --dt 'DT: [(-8,-12,16),(-24,-22,-28,-26),(-10,-14,-2),(-20,-6,-18,-4)]' \
     --output example_v3.svg \
     --table example_v3.csv \
@@ -254,6 +365,7 @@ import argparse
 import ast
 import csv
 import io
+import time
 import json
 import math
 import os
@@ -271,7 +383,7 @@ matplotlib.rcParams["svg.fonttype"] = "none"
 matplotlib.rcParams["pdf.fonttype"] = 42
 matplotlib.rcParams["ps.fonttype"] = 42
 DIAGRAM_FONT_FAMILY = "Arial"
-SCRIPT_VERSION = "V4.5"
+SCRIPT_VERSION = "V5.4"
 VERSION = SCRIPT_VERSION
 DT_LABEL_BOX_PAD = 0.22
 CROSSING_ID_BOX_PAD = 0.28
@@ -311,13 +423,37 @@ GUI_HELP_TEXT = {
     "table": "Optional CSV table listing each crossing, original odd/even DT labels, components, over/under label, and 2D coordinates.",
     "xyz": "Path for the spherical x y z coordinate file. The file is plain three-column coordinates. Blank lines separate link components.",
     "negative_even": "DT sign convention. Default: a negative even DT label means the even-labeled visit is over, matching the common Sage/KnotTheory convention. Choose 'under' for the opposite convention.",
-    "layout": "2D preview/image layout. tutte is usually smooth and clean; shaped-tutte pins the Tutte boundary to a chosen shape (see tutte shape); holed-tutte pins two faces (outer + auto-picked central hole) to the outer/inner outlines of a holed shape (ring/annulus) so the diagram wraps around a central hole; planar is safest; spring and kamada are aesthetic force-directed alternatives that are audited for false crossings.",
+    "layout": "2D preview/image layout. tutte is usually smooth and clean; shaped-tutte pins the Tutte boundary to a chosen shape (see tutte shape); holed-tutte pins two faces (outer + auto-picked central hole) to the outer/inner outlines of a holed shape (ring/annulus) so the diagram wraps around a central hole; sphere-stereo lays the diagram out on the unit sphere (3D Kamada-Kawai, as the 3D XYZ pipeline) and stereographically projects it from the pole farthest from all strands -- the method of choice for links whose rings lie in near-orthogonal planes (e.g. Edwards-Venn AM5), which collapse in boundary-pinned layouts (the pole's face becomes the outer region; combine with relax passes / min separation); planar is safest; spring and kamada are aesthetic force-directed alternatives that are audited for false crossings.",
     "tutte_shape": "Boundary shape for the shaped-tutte and holed-tutte layouts: circle, ellipse, rectangle, or rounded-rectangle. All shapes are convex, so the Tutte solve stays valid. For holed-tutte this is the shape of both the outer and inner ring outlines.",
     "hole_ratio": "Holed-tutte inner (hole) outline size as a fraction of the outer outline, in (0,1). Smaller values give a bigger hole/thinner ring wall; larger values give a small hole. Only used when layout is holed-tutte. Default: 0.4.",
     "hole_swap": "Holed-tutte: swap which of the two chosen boundary FACES is pinned to the OUTER outline and which to the INNER (hole) outline, then re-solve. This is a structural change (a different face ends up on the rim), NOT a simple inside-out flip -- for that, use 'invert ring'. Only used when layout is holed-tutte.",
     "invert_ring": "Holed-tutte: turn the ring inside-out (invert inner/outer outlines).  It reflects every crossing's radius about the ring's mid-line, so whatever is currently near the inner hole ends up on the outside and vice versa -- the same diagram, flipped radially (the mid-line curve is unchanged).  Unlike 'swap inner/outer face' (which re-solves with the two boundary faces exchanged), this keeps the layout and just flips it. Only used when layout is holed-tutte.",
     "ring_tilt": "Holed-tutte ring tilt in degrees (0-90): the viewing angle of the ring seen as the wall of a bucket. The flat annulus is the top-down view of a bucket whose wall carries the crossings. At 90 (default) you look straight down the bucket -> the flat top-view wreath, with the closed principal curve running around the whole circumference. As you lower it, the bucket rotates about the horizontal axis so its wall opens toward a side view (0 = fully side-on). The tilt lifts each crossing onto the 3D bucket wall and projects it, so it redistributes the crossings along the tilted ring rather than rigidly rotating the finished picture. Only used when layout is holed-tutte.",
     "min_sep": "Minimum separation between non-incident strand pieces, as a fraction of the diagram span (equivalently discourages very shallow near-parallel crossings). A post-layout relaxation pushes closer pieces apart while a spring keeps the overall layout; larger values separate more but can distort. 0 = off. Try 0.02-0.05. Applies to all 2D layouts.",
+    "ring_equalize": "holed-tutte only. Strength 0..1 of a radial histogram equalization applied after the harmonic ring solve: each crossing keeps its angle but its radial position across the ring width is remapped so the radial distribution becomes uniform (1 = fully even, 0 = off, values between blend). This directly decongests diagrams whose strands crowd at the rims (typical for large closed structures such as the fishtail closure, because the barycentric solve compresses interior detail exponentially toward the pinned boundaries). May introduce flagged false crossings at extreme values; combine with 'relax passes' and 'min separation'. Default: 0.0.",
+    "relax_passes": "Number of planarity-guarded relaxation passes applied after ANY 2D layout (0 = off). Each pass moves every non-pinned node toward the centroid of its graph neighbours while equalizing incident edge lengths toward the median; a pass that would create a straight-edge crossing is rejected and retried at half strength, so the layout can never lose planarity. Use 5-30 for congested diagrams. Runtime grows with passes x edges^2 (bounding-box pruned). Default: 0.",
+    "relax_strength": "Step size 0..1 of each relaxation pass (see 'relax passes'). Larger is faster but rejected more often near tight spots. Default: 0.5.",
+    "proj_elev": "3D projection viewpoint elevation in degrees (matplotlib convention: 90 = looking straight down the +z axis, 0 = side view). Used by the 'current' view of the 3D projection window and saved projections. Default: 25.",
+    "proj_azim": "3D projection viewpoint azimuth in degrees (rotation about the z axis). Default: -60.",
+    "proj_roll": "3D projection roll in degrees about the viewing direction (rotates the projected image). Default: 0.",
+    "proj_line_width": "Line width of the projected strands. The white occlusion halo scales with it (2.8x), so thicker lines also produce wider under-strand gaps at apparent crossings. Default: 2.2.",
+    "proj_skeleton": "Overlay the mapped FRAMEWORK on the projection: a light depth-shaded wireframe of the whole mapped surface (the sphere / ellipsoid / cylinder / torus the strands ride on), plus optional neutral framework chords and crossing anchor dots. Component colours stay reserved for the smooth strands. Kamada sphere layouts only (stereographic has no skeleton).",
+    "proj_skeleton_ids": "Label each skeleton anchor with its crossing ID (same IDs as the 2D diagram / crossing order box).",
+    "proj_views": "Comma-separated list of projections written by 'Save projection(s)' and --save-projections. Choices: current (the elev/azim/roll fields), top (down +z), front (down +y), side (down +x). Example: current,top,front,side. Default: current,top.",
+    "proj_save_with_xyz": "When checked, 'Save XYZ' also writes the selected projection views (SVG+PNG) next to the chosen .xyz file, so the 2D projections are saved alongside the 3D coordinates in one step.",
+    "proj_depth_fade": "Depth cueing strength 0..1 for the 3D projection: 0 = uniform opacity; larger values make farther strand chunks (and skeleton parts) more transparent, nearer ones opaque -- the score_diagram sphere-panel effect. Helps disentangle rings seen edge-on. Default: 0.55.",
+    "proj_perspective": "0 = orthographic projection. A positive value switches to a perspective camera at that distance in scene radii (try 2-4): foreshortening opens up rings that are edge-on in orthographic view, like a real 3D viewer. Smaller = stronger perspective. Default: 0.",
+    "proj_auto_view": "Search the view sphere (10-degree grid + 2-degree refinement) for the direction that maximizes the WORST component's projected roundness (isoperimetric ratio of its projected loop). This avoids viewpoints where any ring degenerates into a sliver -- the failure mode of links whose rings lie in near-orthogonal planes. Sets the elevation/azimuth fields.",
+    "proj_skeleton_only": "Hide the smooth strands and show ONLY the mapped framework (skeleton arcs + anchors). With depth fade this gives the clearest picture of the global shape of a difficult structure.",
+    "proj_grid_density": "Number of meridian lines of the mapped-surface wireframe (parallels follow at about half). 0 hides the mesh entirely. The mesh is generated together with the 3D curve, so changing this takes effect on the next 'Redraw 3D projection'. Default: 24.",
+    "proj_grid_color": "Colour of the surface wireframe. Any matplotlib colour: gray levels as '0.82' (0=black, 1=white), names like 'lightsteelblue', or hex '#d0e0f0'. Applied live (cached curve is re-rendered). Default: 0.82.",
+    "proj_grid_lw": "Line width of the surface wireframe. Applied live. Default: 0.4.",
+    "proj_chords": "Show the neutral dark-gray framework chords connecting the crossing anchors. Uncheck to show only the surface wireframe plus any optional anchor dots/IDs (+ strands). Applied live. CLI: --proj-hide-chords.",
+    "proj_crossing_dots": "Show small black dots at the crossing anchors in the mapped framework. Hidden by default so dense projections do not get peppered with dots. Applied live. CLI: --proj-crossing-dots.",
+    "proj_fixed_grid": "Keep the mapped-surface grid fixed to the view used by the last 'Redraw 3D projection' while live orbit/roll rotates the strands and framework. This gives a steady reference mesh during rotation. Applied live. CLI: --proj-fixed-grid.",
+    "xyz_clearance": "Minimum 3D distance between non-neighboring strand pieces. 0 selects the automatic value (0.8 x crossing offset). The V5.4 repair pass uses extra radial layers to separate crowded non-crossing approaches. CLI: --xyz-clearance.",
+    "xyz_repair": "Run the V5.4 clearance repair before the topology audit. Keep this enabled for Kamada sphere layouts. Stereo-safe disables repair and smoothing internally because moving its angular positions would void its correct-by-construction guarantee. CLI: --no-xyz-repair disables it.",
+    "redraw_projection": "Recompute and topology-audit the 3D Sphere-XYZ curve with the CURRENT '3D XYZ' tab parameters, then redraw the projection window. The audit result appears in both the main status log and the projection window. Quick-view buttons only re-project the audited cached curve and are instant.",
     "tutte_aspect": "Dimensionless ratio (long axis / short axis) of the shaped-tutte ellipse or rectangle boundary. Suggested range 1.0-4.0 (1.0 = round/square). Used only when layout is shaped-tutte, the shape is not a circle, and auto aspect is off. Default: 1.8.",
     "tutte_corner_radius": "Dimensionless ratio 0.0-1.0 giving the rounded-rectangle corner radius as a fraction of the short half-extent. 0 = sharp rectangle, 1 = fully rounded (stadium). Only used for the rounded-rectangle shape. Default: 0.25.",
     "tutte_decompress": "Dimensionless internal decompression strength for tutte and shaped-tutte, measured RELATIVE TO THE BOUNDARY (not a geometric shape-center push). 0 reproduces the classic Tutte layout; suggested range 0.0-1.0 (values much above ~1 can push interior nodes far enough out to create flagged false crossings). It applies boundary-depth edge weights (graph distance from the outer face) that push deep interior structure outward toward the boundary. It does not target where crossings are crowded -- for that, use 'tutte COM expand'. Default: 0.0.",
@@ -342,7 +478,7 @@ GUI_HELP_TEXT = {
     "crossing_id_font_size": "Font size for displayed crossing IDs such as c1, c7, c14. Default: 6.",
     "line_width": "2D strand line width in Matplotlib points. Default: 2.0.",
     "gap_frac": "Under-strand gap size in the 2D image. This is a ratio of the overall 2D diagram span, not an absolute coordinate distance. Default: 0.025.",
-    "sphere_layout": "XYZ sphere layout. spherical-kamada distributes the graph directly over the sphere and is best for symmetric spherical models. shaped-kamada warps that spherical construction onto a shaped surface (see surface shape). stereographic maps the current 2D drawing onto a sphere.",
+    "sphere_layout": "XYZ sphere layout. spherical-kamada distributes the graph directly over the sphere and is best for symmetric spherical models. shaped-kamada warps that construction onto a shaped surface. stereographic maps the current 2D drawing onto a sphere. stereo-safe uses the audited planar layout, stereographically lifts it, and adds only radial crossing bumps; it is the correct-by-construction choice when a dense Kamada layout fails the topology audit.",
     "sphere_radius": "Base radius of the sphere in XYZ coordinate units. Default: 50.0. With crossing offset = 0, all XYZ points lie at this radius.",
     "sphere_extent": "Only used by stereographic. Dimensionless. After centering the 2D drawing, the farthest planar point is scaled to this radius before inverse stereographic projection. 1.0 reaches the equator; larger values use more of the southern hemisphere.",
     "crossing_offset": "Absolute radial offset in XYZ coordinate units, not a ratio. Over-layer radius is R + offset; under-layer radius is R - offset. Default: 5.0. Use 0 for a perfect sphere with no height separation.",
@@ -1290,7 +1426,7 @@ def _holed_torus_coords(G):
 def holed_tutte_layout(G, emb, shape="circle", aspect=1.0, corner_radius=0.0,
                        hole_ratio=0.4, swap=False, auto_aspect=False,
                        orient_degrees=0.0, auto_orient=True, ring_tilt=90.0,
-                       invert_ring=False, meta_out=None):
+                       invert_ring=False, ring_equalize=0.0, meta_out=None):
     """
     'Holed' Tutte layout: two boundary cycles of the planar embedding are pinned,
     one to an outer outline and one to an inner (hole) outline of a holed shape
@@ -1515,6 +1651,37 @@ def holed_tutte_layout(G, emb, shape="circle", aspect=1.0, corner_radius=0.0,
         current = _one_round(current, outer, hole)
     pos = {n: current[idx[n]] for n in nodes}
 
+    # 2a) V5.0 'ring equalize': the harmonic solve compresses interior detail
+    #     toward the pinned rims on large rings.  Histogram-equalize the free
+    #     nodes' radial fractions across the ring width (angles unchanged) so the
+    #     radial distribution becomes uniform; blend by the requested strength.
+    s_eq = min(1.0, max(0.0, float(ring_equalize or 0.0)))
+    if s_eq > 0.0:
+        pinned_ring = set(outer) | set(hole)
+        free_nodes = [n for n in nodes if n not in pinned_ring]
+        if len(free_nodes) >= 2:
+            tvals = {}
+            for n in free_nodes:
+                px, py = pos[n]
+                a = math.atan2(py, px)
+                r = math.hypot(px, py)
+                ro = rad(a)
+                ri = hr * ro
+                t = (r - ri) / max(ro - ri, 1.0e-12)
+                tvals[n] = min(1.0, max(0.0, t))
+            order_eq = sorted(free_nodes, key=lambda n: tvals[n])
+            m_eq = float(len(order_eq))
+            for rank, n in enumerate(order_eq):
+                t_new = (1.0 - s_eq) * tvals[n] + s_eq * ((rank + 1.0) / (m_eq + 1.0))
+                px, py = pos[n]
+                a = math.atan2(py, px)
+                r = math.hypot(px, py)
+                ro = rad(a)
+                ri = hr * ro
+                r_new = ri + t_new * (ro - ri)
+                sc = r_new / max(r, 1.0e-12)
+                pos[n] = np.array([px * sc, py * sc])
+
     # 2b) Optional 'invert ring (inside-out)': reflect every crossing's radius
     #     about the ring's mid-line so the inner boundary ends up outside and the
     #     outer boundary inside, turning the same diagram inside-out (the medial
@@ -1587,6 +1754,7 @@ def holed_tutte_layout(G, emb, shape="circle", aspect=1.0, corner_radius=0.0,
         inner_loop = dense if invert_ring else (hr * dense)
         meta_out.clear()
         meta_out["kind"] = "holed"
+        meta_out["pinned_nodes"] = list(set(outer) | set(hole))
         meta_out["aspect_value"] = float(aspect)
         meta_out["boundary_outer"] = _frame(_bucket_loop(_invert_loop(outer_loop)))
         meta_out["boundary_inner"] = _frame(_bucket_loop(_invert_loop(inner_loop)))
@@ -1739,6 +1907,184 @@ def nudge_min_separation(P, G, min_sep, iterations=8, damping=0.5, anchor=0.12):
     return {n: coords[n] for n in nodes}
 
 
+def sphere_stereo_layout(model, G, crossing_angle_degrees=8.0, equalize=0.0):
+    """
+    V5.2 2D layout for links that defeat boundary-pinned layouts (rings in
+    near-orthogonal planes, e.g. Edwards-Venn AM_n).
+
+    The crossing graph is laid out on the unit sphere exactly as the 3D XYZ
+    pipeline does (3D Kamada-Kawai unit directions + local crossing-gadget
+    compaction), a projection pole is chosen as the direction farthest (in
+    angle) from every node and strand-arc sample, and the whole spherical
+    diagram is stereographically projected from that pole.  Stereographic
+    projection is a homeomorphism of the sphere minus the pole, so the image
+    is a genuine planar diagram of the same link; the face containing the pole
+    becomes the outer region.
+    """
+    raw_dirs = _kamada_3d_unit_directions(G)
+    P3, centers3 = _compact_crossing_gadgets_on_sphere(
+        model, raw_dirs, crossing_angle=math.radians(float(crossing_angle_degrees))
+    )
+    nodes = list(G.nodes())
+    dirs = np.array([P3[n] for n in nodes], float)
+
+    # Sample strand arcs (out-corner -> seg-mid -> in-corner great arcs) so the
+    # pole avoids strands, not just graph nodes.
+    samples = [dirs]
+    for cp in model["comp_positions"]:
+        for p in cp:
+            k = model["pos_cross"][p]
+            role = model["pos_role"][p]
+            q = model["nextpos"][p]
+            k2 = model["pos_cross"][q]
+            role2 = model["pos_role"][q]
+            a = P3[(k, "out_" + role)]
+            m = P3[("seg", p)]
+            b = P3[(k2, "in_" + role2)]
+            samples.append(_spherical_quadratic_bezier(a, m, b, 9))
+    cloud = _normalize_rows(np.vstack(samples))
+
+    # Pole = Fibonacci-sphere candidate with the largest angular clearance.
+    cands = _fibonacci_sphere_directions(1500)
+    dots = np.clip(cands @ cloud.T, -1.0, 1.0)
+    clearance = np.arccos(dots).min(axis=1)
+    pole = cands[int(np.argmax(clearance))]
+
+    # Stereographic projection from the pole onto the plane tangent at -pole.
+    t1, t2 = _tangent_basis_at(pole)
+    pos = {}
+    for n, d in zip(nodes, dirs):
+        w = 1.0 - float(np.dot(d, pole))
+        if w < 1.0e-9:
+            w = 1.0e-9
+        pos[n] = np.array([float(np.dot(d, t1)) / w, float(np.dot(d, t2)) / w])
+
+    # Optional radial histogram equalization about the centroid (the 'ring
+    # equalize' knob): stereographic projection compresses the anti-pole region
+    # into the centre; equalizing the radial distribution (angles kept) opens
+    # it up.  The false-crossing audit still applies downstream.
+    s_eq = min(1.0, max(0.0, float(equalize or 0.0)))
+    if s_eq > 0.0 and len(pos) >= 3:
+        # Smooth power-law radial expansion about the centroid (gamma < 1
+        # opens the compressed anti-pole centre).  A smooth monotone radial
+        # map is a homeomorphism of the plane, so it distorts the (straight)
+        # edges far less than a per-node rank remap would.
+        ctr = np.mean(list(pos.values()), axis=0)
+        rr = {n: float(np.linalg.norm(pos[n] - ctr)) for n in pos}
+        r_max = max(rr.values()) or 1.0
+        gamma = 1.0 - 0.6 * s_eq
+        for n in pos:
+            if rr[n] > 1.0e-12:
+                r_new = r_max * (rr[n] / r_max) ** gamma
+                pos[n] = ctr + (pos[n] - ctr) * (r_new / rr[n])
+    return pos
+
+
+def relax_planar_layout(P, G, passes=0, strength=0.5, pinned=None):
+    """
+    V5.0 planarity-guarded relaxation, applied after any 2D layout.
+
+    Each pass moves every non-pinned node toward the centroid of its graph
+    neighbours while nudging incident edge lengths toward the median edge
+    length.  After the whole sweep the layout is checked for straight-edge
+    crossings between non-incident edges; a sweep that would introduce one is
+    rejected and retried at half strength, so planarity is preserved by
+    construction.  ``pinned`` is an iterable of node keys to hold fixed (the
+    layout's pinned boundary faces when known); when None, the convex hull of
+    the input positions is held fixed so the outer shape survives.
+    """
+    passes = int(passes or 0)
+    strength = float(strength or 0.0)
+    if not P or passes <= 0 or strength <= 0.0:
+        return P
+    nodes = list(P.keys())
+    coords = {n: np.asarray(P[n], float).copy() for n in nodes}
+    edges = [(u, v) for u, v in G.edges() if u != v]
+    if len(edges) < 2:
+        return P
+
+    if pinned is None:
+        pts = np.array([coords[n] for n in nodes])
+        try:
+            hull_idx = set()
+            c0 = pts.mean(axis=0)
+            rel = pts - c0
+            ang = np.arctan2(rel[:, 1], rel[:, 0])
+            rr = np.linalg.norm(rel, axis=1)
+            # Nodes that are radially extremal in their angular bin approximate
+            # the hull cheaply and robustly for our near-convex boundaries.
+            nbin = max(16, int(len(nodes) ** 0.5))
+            for b in range(nbin):
+                lo = -np.pi + 2.0 * np.pi * b / nbin
+                hi = lo + 2.0 * np.pi / nbin
+                sel = np.where((ang >= lo) & (ang < hi))[0]
+                if len(sel):
+                    hull_idx.add(int(sel[np.argmax(rr[sel])]))
+            pinned_set = {nodes[i] for i in hull_idx}
+        except Exception:
+            pinned_set = set()
+    else:
+        pinned_set = set(pinned)
+
+    node_index = {n: i for i, n in enumerate(nodes)}
+    e_u = np.array([node_index[u] for (u, v) in edges])
+    e_v = np.array([node_index[v] for (u, v) in edges])
+    ii, jj = np.triu_indices(len(edges), k=1)
+    # Exclude incident edge pairs (sharing an endpoint) once, up front.
+    share = ((e_u[ii] == e_u[jj]) | (e_u[ii] == e_v[jj]) |
+             (e_v[ii] == e_u[jj]) | (e_v[ii] == e_v[jj]))
+    ii, jj = ii[~share], jj[~share]
+
+    def _has_crossing(cc):
+        pts = np.array([cc[n] for n in nodes])
+        A = pts[e_u]; B = pts[e_v]
+        # Bounding-box rejection, vectorized over the precomputed pairs.
+        lo = np.minimum(A, B); hi = np.maximum(A, B)
+        ok = ~((hi[ii, 0] < lo[jj, 0]) | (hi[jj, 0] < lo[ii, 0]) |
+               (hi[ii, 1] < lo[jj, 1]) | (hi[jj, 1] < lo[ii, 1]))
+        if not ok.any():
+            return False
+        i2, j2 = ii[ok], jj[ok]
+        p, q = A[i2], B[i2]
+        r, s = A[j2], B[j2]
+        d1 = np.cross(q - p, r - p)
+        d2 = np.cross(q - p, s - p)
+        d3 = np.cross(s - r, p - r)
+        d4 = np.cross(s - r, q - r)
+        return bool(np.any((d1 * d2 < 0.0) & (d3 * d4 < 0.0)))
+
+    step = strength
+    for _p in range(passes):
+        if step < 1.0e-3:
+            break
+        lens = [float(np.linalg.norm(coords[u] - coords[v])) for (u, v) in edges]
+        L_med = float(np.median([x for x in lens if x > 0.0]) or 0.0)
+        if L_med <= 0.0:
+            break
+        proposal = {n: coords[n].copy() for n in nodes}
+        for n in nodes:
+            if n in pinned_set:
+                continue
+            nbrs = list(G[n])
+            if not nbrs:
+                continue
+            p0 = coords[n]
+            cen = np.mean([coords[b] for b in nbrs], axis=0)
+            pull = np.zeros(2)
+            for b in nbrs:
+                d = coords[b] - p0
+                dist = float(np.linalg.norm(d))
+                if dist > 1.0e-12:
+                    pull += (d / dist) * (dist - L_med)
+            move = 0.55 * (cen - p0) + 0.45 * (pull / max(1, len(nbrs)))
+            proposal[n] = p0 + step * move
+        if _has_crossing(proposal):
+            step *= 0.5
+            continue
+        coords = proposal
+    return {n: coords[n] for n in nodes}
+
+
 def compute_positions_connected(G, layout, tutte_opts=None, meta_out=None):
     ok, emb = nx.check_planarity(G)
     if not ok:
@@ -1768,6 +2114,7 @@ def compute_positions_connected(G, layout, tutte_opts=None, meta_out=None):
                 auto_orient=bool(opts.get("auto_orient", True)),
                 ring_tilt=float(opts.get("ring_tilt", 90.0)),
                 invert_ring=bool(opts.get("invert_ring", False)),
+                ring_equalize=float(opts.get("ring_equalize", 0.0)),
                 meta_out=meta_out,
             )
         except np.linalg.LinAlgError:
@@ -1822,6 +2169,17 @@ def compute_positions_connected(G, layout, tutte_opts=None, meta_out=None):
         }
     if layout == "kamada":
         return {n: np.asarray(xy, float) for n, xy in nx.kamada_kawai_layout(G).items()}
+    if layout == "sphere-stereo":
+        model = opts.get("model")
+        if model is None:
+            raise ValueError("sphere-stereo layout needs the DT model (internal).")
+        pos = sphere_stereo_layout(
+            model, G, equalize=float(opts.get("ring_equalize", 0.0))
+        )
+        if meta_out is not None:
+            meta_out.clear()
+            meta_out["kind"] = "sphere-stereo"
+        return pos
     raise ValueError("Unknown layout %r" % layout)
 
 
@@ -3696,6 +4054,8 @@ def _build_spherical_kamada_xyz_components(
     xyz_spacing,
     crossing_angle,
     direct_connecting=True,
+    skeleton_out=None,
+    skeleton_grid=24,
 ):
     """Sphere-native method: distribute the diagram directly on S^2."""
     if G is None:
@@ -3704,6 +4064,49 @@ def _build_spherical_kamada_xyz_components(
     P3, centers3 = _compact_crossing_gadgets_on_sphere(
         model, raw_dirs, crossing_angle=crossing_angle
     )
+
+    # V5.0 'mapped skeleton': the per-crossing anchors and the strand chords
+    # between them (through the connector midpoints), as UNIT directions; the
+    # caller scales them to the sphere radius and applies the surface warp.
+    if skeleton_out is not None:
+        skeleton_out.clear()
+        _ncross = len(model["crossings"])
+        skeleton_out["points"] = np.array(
+            [centers3[k] for k in range(_ncross)], float
+        )
+        _segs = []
+        _seg_comps = []
+        for _ci, cp in enumerate(model["comp_positions"]):
+            for p in cp:
+                k = model["pos_cross"][p]
+                q = model["nextpos"][p]
+                k2 = model["pos_cross"][q]
+                _segs.append(np.array(
+                    [centers3[k], P3[("seg", p)], centers3[k2]], float
+                ))
+                _seg_comps.append(_ci)
+        skeleton_out["segments"] = _segs
+        skeleton_out["segment_comps"] = _seg_comps
+        # Whole-surface wireframe (unit sphere grid; the caller scales it and
+        # puts it through the same surface warp as the strands, so the drawn
+        # mesh IS the mapped surface -- sphere, ellipsoid, cylinder or torus).
+        _wires = []
+        _ng = max(0, int(skeleton_grid or 0))
+        if _ng > 0:
+            _npar = max(3, _ng // 2 - 1)
+            _vv = np.linspace(0.02 * math.pi, 0.98 * math.pi, 49)
+            for _u in np.linspace(0.0, 2.0 * math.pi, _ng + 1)[:-1]:
+                _wires.append(np.column_stack([
+                    np.cos(_u) * np.sin(_vv), np.sin(_u) * np.sin(_vv), np.cos(_vv)
+                ]))
+            _uu = np.linspace(0.0, 2.0 * math.pi, 73)
+            for _v in np.linspace(0.0, math.pi, _npar + 2)[1:-1]:
+                _wires.append(np.column_stack([
+                    np.cos(_uu) * math.sin(_v), np.sin(_uu) * math.sin(_v),
+                    np.full_like(_uu, math.cos(_v))
+                ]))
+        skeleton_out["surface_wires"] = _wires
+        skeleton_out["unit"] = True
 
     dense_step = float(xyz_spacing) / 5.0
     if dense_step <= 0.0:
@@ -3984,7 +4387,8 @@ def _geom_resample_closed_3d(points, spacing):
 def _warp_components_to_surface(xyz_components, sphere_radius, surface_shape,
                                 surface_aspect, surface_tube, xyz_spacing,
                                 surface_auto_orient=True, surface_auto_aspect=True,
-                                surface_orient=0.0, surface_tilt=0.0):
+                                surface_orient=0.0, surface_tilt=0.0,
+                                return_warp=False):
     """
     Warp spherical components (built on the base sphere of radius R) onto a
     shaped surface.  Each spherical point is decomposed into a unit direction and
@@ -4028,7 +4432,745 @@ def _warp_components_to_surface(xyz_components, sphere_radius, surface_shape,
         d, o = item
         warped = warp(d, o)
         out.append(_geom_resample_closed_3d(warped, xyz_spacing))
+
+    if return_warp:
+        def _warp_pointset(arr):
+            arr = np.asarray(arr, float)
+            if len(arr) == 0:
+                return arr
+            r = np.linalg.norm(arr, axis=1)
+            safe = r > 1.0e-12
+            d = np.zeros_like(arr)
+            d[safe] = arr[safe] / r[safe, None]
+            if not np.all(safe):
+                d = _normalize_rows(d)
+            return warp(d, r - R)
+        return out, _warp_pointset
     return out
+
+
+
+
+# --------------------------------------------------------------------------
+# V5.4: 3D clearance repair + topology audit.
+#
+# Dense diagrams (chains, heavy chains) cannot always be laid out on a single
+# surface layer: the spherical layout can pinch two strands to near-contact
+# away from any true crossing, and smoothing/warping can collapse the radial
+# over/under separation at true crossings.  Both corrupt the 3D curve's link
+# type even though the 2D diagram is audit-clean.  The repair pass below
+# detects every close approach between non-neighboring arcs and pushes the
+# arcs apart -- coherently per pinch cluster, preserving the current local
+# order -- effectively stacking crowded regions into extra radial layers.
+# It runs after the raw build, after smoothing, and after the surface warp.
+# When spherogram/snappy are available (audit_xyz.py), a final topology
+# audit reconstructs the link from the 3D curve and verifies it is
+# isometric to the DT link, so any residual corruption is reported loudly.
+# --------------------------------------------------------------------------
+
+def _xyz_conflict_pairs(comps, clearance, skip=4, anchors=None,
+                        exclude_radius=0.0):
+    """Close approaches between non-neighboring points of closed polylines.
+
+    Returns a list of (ci, i, cj, j, dist).  Point sampling is dense
+    (xyz_spacing), so point-point distance is an adequate proxy for
+    segment-segment distance at these clearances."""
+    cell = max(float(clearance), 1.0e-9)
+    grid = {}
+    for ci, pts in enumerate(comps):
+        for i, p in enumerate(pts):
+            key = (int(math.floor(p[0] / cell)),
+                   int(math.floor(p[1] / cell)),
+                   int(math.floor(p[2] / cell)))
+            grid.setdefault(key, []).append((ci, i))
+    out = []
+    for ci, pts in enumerate(comps):
+        n = len(pts)
+        for i, p in enumerate(pts):
+            base = (int(math.floor(p[0] / cell)),
+                    int(math.floor(p[1] / cell)),
+                    int(math.floor(p[2] / cell)))
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    for dz in (-1, 0, 1):
+                        for cj, j in grid.get((base[0] + dx, base[1] + dy,
+                                               base[2] + dz), ()):
+                            if cj < ci or (cj == ci and j <= i):
+                                continue
+                            if cj == ci:
+                                d_idx = min(abs(i - j), n - abs(i - j))
+                                if d_idx <= skip:
+                                    continue
+                            q = comps[cj][j]
+                            dist = math.sqrt((p[0] - q[0]) ** 2 +
+                                             (p[1] - q[1]) ** 2 +
+                                             (p[2] - q[2]) ** 2)
+                            if dist < clearance:
+                                if anchors is not None and exclude_radius > 0.0:
+                                    mid = 0.5 * (np.asarray(p) + np.asarray(q))
+                                    dmin = np.min(np.linalg.norm(
+                                        anchors - mid[None, :], axis=1))
+                                    if dmin < exclude_radius:
+                                        continue   # inside a true crossing
+                                out.append((ci, i, cj, j, dist))
+    return out
+
+
+def _repair_xyz_clearance(comps, clearance, max_iters=80, halfwidth=8,
+                          push_frac=0.6, anchors=None, exclude_radius=0.0):
+    """Separate all conflicting arcs to >= clearance, coherently per pinch.
+
+    Conflicts are clustered by component pair and index adjacency; each
+    cluster is pushed apart along its mean separation direction (preserving
+    the current order, so true crossings -- already separated by the
+    over/under bumps -- are never reordered, and each false pinch resolves
+    to a trivial R2 pair on one consistent side).  Returns (comps, report).
+    """
+    comps = [np.array(c, float) for c in comps]
+    report = {"initial": None, "iters": 0, "resolved": True,
+              "max_push": 0.0, "layers": 1}
+    total_push = [np.zeros(len(c)) for c in comps]
+    for it in range(max_iters):
+        conflicts = _xyz_conflict_pairs(comps, clearance, anchors=anchors,
+                                        exclude_radius=exclude_radius)
+        if report["initial"] is None:
+            report["initial"] = len(conflicts)
+        if not conflicts:
+            report["iters"] = it
+            break
+        # cluster by (ci, cj) and adjacency of i
+        conflicts.sort(key=lambda r: (r[0], r[2], r[1], r[3]))
+        clusters = []
+        for rec in conflicts:
+            placed = False
+            for cl in clusters:
+                if cl[0][0] == rec[0] and cl[0][2] == rec[2] and                    abs(cl[-1][1] - rec[1]) <= 2 * halfwidth:
+                    cl.append(rec)
+                    placed = True
+                    break
+            if not placed:
+                clusters.append([rec])
+        disp = [np.zeros_like(c) for c in comps]
+        wsum = [np.zeros(len(c)) for c in comps]
+        gain = push_frac * (1.0 + 0.15 * it)      # escalate if stuck
+        for cl in clusters:
+            ci, cj = cl[0][0], cl[0][2]
+            # coherent mean separation direction for the whole pinch
+            vecs = [comps[ci][i] - comps[cj][j] for (_, i, _, j, _) in cl]
+            mean = np.sum(vecs, axis=0)
+            norm = np.linalg.norm(mean)
+            if norm < 1.0e-9:
+                mean = comps[ci][cl[0][1]].copy()
+                norm = np.linalg.norm(mean)
+                if norm < 1.0e-9:
+                    mean, norm = np.array([0.0, 0.0, 1.0]), 1.0
+            u = mean / norm
+            need = max(clearance - d for (_, _, _, _, d) in cl)
+            step = 0.5 * gain * need
+            for (_, i, _, j, _) in cl:
+                for comp_idx, idx, sgn in ((ci, i, 1.0), (cj, j, -1.0)):
+                    n = len(comps[comp_idx])
+                    for k in range(-halfwidth, halfwidth + 1):
+                        w = math.exp(-(k * k) / (0.5 * halfwidth ** 2))
+                        m = (idx + k) % n
+                        disp[comp_idx][m] += sgn * step * w * u
+                        wsum[comp_idx][m] += w
+        for c_idx in range(len(comps)):
+            mask = wsum[c_idx] > 0
+            if mask.any():
+                comps[c_idx][mask] += (disp[c_idx][mask] /
+                                       wsum[c_idx][mask][:, None])
+                total_push[c_idx][mask] += np.linalg.norm(
+                    disp[c_idx][mask] / wsum[c_idx][mask][:, None], axis=1)
+    else:
+        report["resolved"] = False
+        report["iters"] = max_iters
+    mp = max((float(t.max()) if len(t) else 0.0) for t in total_push)
+    report["max_push"] = mp
+    report["layers"] = 1 + int(math.ceil(mp / max(2.0 * clearance, 1e-9)))
+    return comps, report
+
+
+
+
+
+
+def _match_visit_sequence(runs, want_ids):
+    """Order-aware matching of a component's clustered Voronoi runs
+    [(id, i0, j0, dmin), ...] (cyclic) against the diagram's expected
+    crossing-visit sequence want_ids (cyclic), minimizing the summed
+    closest-approach distance.  Tries both orientations and all cyclic
+    starts.  Returns the matched runs in want order, or None."""
+    M, m = len(runs), len(want_ids)
+    if M < m:
+        return None
+    best = None
+    for orient in (1, -1):
+        seq = runs if orient == 1 else runs[::-1]
+        starts = [s for s in range(M) if seq[s][0] == want_ids[0]]
+        for s in starts:
+            INF = float("inf")
+            cost = [[INF] * M for _ in range(m)]
+            parent = [[-1] * M for _ in range(m)]
+            cost[0][0] = seq[s][3]
+            for t in range(1, m):
+                run_min, run_arg = INF, -1
+                for p in range(t - 1, M - (m - t)):
+                    if cost[t - 1][p] < run_min:
+                        run_min, run_arg = cost[t - 1][p], p
+                    q = p + 1
+                    if q < M and seq[(s + q) % M][0] == want_ids[t]:
+                        c = run_min + seq[(s + q) % M][3]
+                        if c < cost[t][q]:
+                            cost[t][q] = c
+                            parent[t][q] = run_arg
+                # also allow q beyond consecutive: fill remaining columns
+                for q in range(t, M):
+                    if seq[(s + q) % M][0] != want_ids[t]:
+                        continue
+                    run_min2 = min(cost[t - 1][p] for p in range(0, q))
+                    if run_min2 < INF:
+                        c = run_min2 + seq[(s + q) % M][3]
+                        if c < cost[t][q]:
+                            cost[t][q] = c
+                            parent[t][q] = int(np.argmin(
+                                [cost[t - 1][p] for p in range(0, q)]))
+            endc = min(cost[m - 1])
+            if endc < INF and (best is None or endc < best[0]):
+                q = int(np.argmin(cost[m - 1]))
+                idxs = [0] * m
+                idxs[m - 1] = q
+                for t in range(m - 1, 0, -1):
+                    q = parent[t][q]
+                    idxs[t - 1] = q
+                matched = [seq[(s + q) % M] for q in idxs]
+                best = (endc, matched)
+    return None if best is None else best[1]
+
+
+
+
+
+
+def _match_all_visits(comps, model, anchors, ball_radius, messages):
+    """Recover, for every component, its ordered crossing visits on the 3D
+    curve: [(anchor_k, passage_point_index, over_flag), ...] per component,
+    aligned with the diagram via order-aware minimum-distance matching.
+    Returns None (with a warning) if alignment fails."""
+    anchors = np.asarray(anchors, float)
+    visits_by_comp = []
+    for pts in comps:
+        n = len(pts)
+        d = np.linalg.norm(pts[:, None, :] - anchors[None, :, :], axis=2)
+        lab = np.argmin(d, axis=1)
+        runs = []
+        i = 0
+        while i < n:
+            j = i
+            while j + 1 < n and lab[j + 1] == lab[i]:
+                j += 1
+            runs.append([int(lab[i]), i, j])
+            i = j + 1
+        merged = []
+        for r in runs:
+            if merged and merged[-1][0] == r[0]:
+                merged[-1][2] = r[2]
+            else:
+                merged.append(list(r))
+        if len(merged) > 1 and merged[0][0] == merged[-1][0]:
+            merged[0] = [merged[0][0], merged[-1][1] - n, merged[0][2]]
+            merged.pop()
+        gap_pts = max(6, int(round(ball_radius / max(
+            1.0e-9, float(np.median(np.linalg.norm(
+                np.diff(pts, axis=0), axis=1)))))))
+        clustered = []
+        last_of = {}
+        for kk, i0, j0 in merged:
+            if kk in last_of and i0 - clustered[last_of[kk]][2] <= gap_pts:
+                clustered[last_of[kk]][2] = j0
+            else:
+                clustered.append([kk, i0, j0])
+                last_of[kk] = len(clustered) - 1
+        if len(clustered) > 1 and clustered[0][0] == clustered[-1][0] and \
+                (clustered[0][1] + n - clustered[-1][2]) <= gap_pts:
+            clustered[0] = [clustered[0][0],
+                            clustered[-1][1] - n, clustered[0][2]]
+            clustered.pop()
+        out_runs = []
+        for kk, i0, j0 in clustered:
+            idxs = [t % n for t in range(i0, j0 + 1)]
+            dmin = float(np.min(d[idxs, kk]))
+            out_runs.append((kk, i0, j0, dmin))
+        visits_by_comp.append(out_runs)
+    result = []
+    for ci, runs in enumerate(visits_by_comp):
+        pts = comps[ci]
+        n = len(pts)
+        want = [model["pos_cross"][p] for p in model["comp_positions"][ci]]
+        overs = [bool(model["over_at"][p])
+                 for p in model["comp_positions"][ci]]
+        matched = _match_visit_sequence(runs, want)
+        if matched is None:
+            from collections import Counter as _C
+            have = _C(r[0] for r in runs)
+            need = _C(want)
+            new_runs = []
+            for (kk, i0, j0, dmin) in runs:
+                if have[kk] < need.get(kk, 0):
+                    idxs = [t % n for t in range(i0, j0 + 1)]
+                    prof = np.linalg.norm(
+                        pts[idxs] - anchors[kk][None, :], axis=1)
+                    if len(prof) >= 5:
+                        a_ = int(np.argmin(prof))
+                        prof2 = prof.copy()
+                        prof2[max(0, a_ - 2):a_ + 3] = np.inf
+                        b_ = int(np.argmin(prof2))
+                        lo_, hi_ = sorted((a_, b_))
+                        cut = lo_ + int(np.argmax(prof[lo_:hi_ + 1]))
+                        new_runs.append((kk, i0, i0 + cut,
+                                         float(prof[:cut + 1].min())))
+                        new_runs.append((kk, i0 + cut + 1, j0,
+                                         float(prof[cut + 1:].min())))
+                        continue
+                new_runs.append((kk, i0, j0, dmin))
+            matched = _match_visit_sequence(new_runs, want)
+        if matched is None:
+            messages.append("[WARN] xyz visit matching failed for "
+                            "component %d; layered rebuild skipped." % ci)
+            return None
+        vis = []
+        for t, k in enumerate(want):
+            kk, i0, j0 = matched[t][:3]
+            idxs = [tt % n for tt in range(i0, j0 + 1)]
+            dd = np.linalg.norm(pts[idxs] - anchors[k][None, :], axis=1)
+            vis.append((k, idxs[int(np.argmin(dd))], overs[t]))
+        result.append(vis)
+    return result
+
+
+def _layered_radial_rebuild(comps, model, anchors, sphere_radius,
+                            sphere_offset, ball_radius, messages):
+    """V5.4 principled fix: rebuild the entire radial structure from the
+    diagram.  Complex diagrams cannot live on ONE surface layer: first
+    compute how many layers are necessary, then render.
+
+    Every inter-crossing arc gets a radial LAYER such that (i) arcs whose
+    2D routes come close sit on different layers and (ii) arcs passing
+    through a foreign crossing's gadget zone avoid the center layer (no
+    silent threading between that crossing's over/under strands).  At each
+    crossing passage the radius is exactly anchor_radius +/- sphere_offset
+    per the DT over/under, blended smoothly into the arc layers.
+    Returns (comps, n_layers) or (comps, -1) if visit matching failed."""
+    comps = [np.array(c, float) for c in comps]
+    anchors = np.asarray(anchors, float)
+    ncross = len(anchors)
+    visits = _match_all_visits(comps, model, anchors, ball_radius, messages)
+    if visits is None:
+        return comps, -1
+    # ---- arcs: (ci, passage index v) spans passages v -> v+1 (cyclic)
+    arcs = []            # (ci, t_start, t_end)  point-index span (cyclic)
+    arc_of = {}
+    for ci, vis in enumerate(visits):
+        n = len(comps[ci])
+        m = len(vis)
+        for v in range(m):
+            t0 = vis[v][1]
+            t1 = vis[(v + 1) % m][1]
+            arcs.append((ci, t0, t1 if t1 > t0 else t1 + n))
+            arc_of[(ci, v)] = len(arcs) - 1
+    # ---- conflict graph over arcs (angular proximity away from gadgets)
+    R = float(sphere_radius)
+    thr = 0.85 * float(ball_radius)
+    pts_dir = [c / np.maximum(np.linalg.norm(c, axis=1)[:, None], 1e-12)
+               for c in comps]
+    a_dir = anchors / np.maximum(
+        np.linalg.norm(anchors, axis=1)[:, None], 1e-12)
+    samples = []
+    for ai, (ci, t0, t1) in enumerate(arcs):
+        n = len(comps[ci])
+        idxs = [t % n for t in range(t0, t1 + 1, 3)]
+        D = pts_dir[ci][idxs] * R
+        da = np.linalg.norm(D[:, None, :] - a_dir[None, :, :] * R, axis=2)
+        far = np.min(da, axis=1) > 1.1 * float(ball_radius)
+        samples.append((D, far, np.min(da, axis=1)))
+    conflict = [set() for _ in arcs]
+    threader = [False] * len(arcs)
+    for ai in range(len(arcs)):
+        Da, fara, dmina = samples[ai]
+        # does this arc cut through a FOREIGN gadget core?  (an arc may
+        # legitimately enter only its own two endpoint gadgets)
+        ci, t0, t1 = arcs[ai]
+        vlist = visits[ci]
+        vv = [v for v in range(len(vlist)) if arc_of[(ci, v)] == ai]
+        own = set()
+        for v in vv:
+            own.add(vlist[v][0])
+            own.add(vlist[(v + 1) % len(vlist)][0])
+        da_all = np.linalg.norm(Da[:, None, :] - a_dir[None, :, :] * R,
+                                axis=2)
+        # ignore samples close to the arc's endpoints (inside own gadgets)
+        for k in range(ncross):
+            if k in own:
+                continue
+            if np.any(da_all[:, k] < 0.7 * float(ball_radius)):
+                threader[ai] = True
+                break
+        for bj in range(ai + 1, len(arcs)):
+            cj = arcs[bj][0]
+            Db, farb, _ = samples[bj]
+            sel_a = fara
+            if not sel_a.any():
+                continue
+            dd = np.linalg.norm(Da[sel_a][:, None, :] - Db[None, :, :],
+                                axis=2)
+            mask_b = farb[None, :] if farb.any() else None
+            if mask_b is None:
+                continue
+            dd = np.where(np.broadcast_to(farb[None, :], dd.shape), dd,
+                          np.inf)
+            if np.min(dd) < thr:
+                conflict[ai].add(bj)
+                conflict[bj].add(ai)
+    # ---- greedy coloring (highest degree first)
+    order = sorted(range(len(arcs)), key=lambda a: -len(conflict[a]))
+    layer = [-1] * len(arcs)
+    for a in order:
+        used = {layer[b] for b in conflict[a] if layer[b] >= 0}
+        l = 0
+        while l in used:
+            l += 1
+        layer[a] = l
+    L = max(layer) + 1
+    # threading arcs must not sit on the center layer (radius ~ R)
+    if L == 1 and any(threader):
+        L = 2
+    center = (L - 1) / 2.0
+    for a in range(len(arcs)):
+        if threader[a] and abs(layer[a] - center) < 0.25:
+            used = {layer[b] for b in conflict[a] if layer[b] >= 0}
+            l = 0
+            while l in used or abs(l - center) < 0.25:
+                l += 1
+            layer[a] = l
+            L = max(L, l + 1)
+            center = (L - 1) / 2.0
+    lam = 2.6 * float(sphere_offset)
+    # ---- rebuild radii: exact passage radii at crossings, layer radii
+    # mid-arc, cosine blends along each arc's OWN arclength; short arcs
+    # interpolate passage-to-passage directly.
+    blend = max(1.0e-9, float(ball_radius))
+    for ci, vis in enumerate(visits):
+        pts = comps[ci]
+        n = len(pts)
+        m = len(vis)
+        new_r = np.zeros(n)
+        assigned = np.zeros(n, bool)
+        for v in range(m):
+            a_idx = arc_of[(ci, v)]
+            t0, t1 = arcs[a_idx][1], arcs[a_idx][2]
+            r_layer = R + (layer[a_idx] - (L - 1) / 2.0) * lam
+            k0, ov0 = vis[v][0], vis[v][2]
+            k1, ov1 = vis[(v + 1) % m][0], vis[(v + 1) % m][2]
+            r_p0 = np.linalg.norm(anchors[k0]) + \
+                (1.0 if ov0 else -1.0) * float(sphere_offset)
+            r_p1 = np.linalg.norm(anchors[k1]) + \
+                (1.0 if ov1 else -1.0) * float(sphere_offset)
+            idxs = [t % n for t in range(t0, t1 + 1)]
+            seg = pts[idxs]
+            ds = np.linalg.norm(np.diff(seg, axis=0), axis=1)
+            s = np.concatenate([[0.0], np.cumsum(ds)])
+            S = max(s[-1], 1.0e-9)
+            for t_, m_ in enumerate(idxs):
+                d0, d1 = s[t_], S - s[t_]
+                if S < 2.0 * blend:
+                    w = 0.5 * (1 + math.cos(math.pi * min(1.0, d0 / S)))
+                    r = w * r_p0 + (1 - w) * r_p1
+                elif d0 < blend:
+                    w = 0.5 * (1 + math.cos(math.pi * d0 / blend))
+                    r = w * r_p0 + (1 - w) * r_layer
+                elif d1 < blend:
+                    w = 0.5 * (1 + math.cos(math.pi * d1 / blend))
+                    r = w * r_p1 + (1 - w) * r_layer
+                else:
+                    r = r_layer
+                if not assigned[m_]:
+                    new_r[m_] = r
+                    assigned[m_] = True
+        for v in range(m):                       # exact passage radii last
+            k0, p_idx, ov0 = vis[v]
+            new_r[p_idx % n] = np.linalg.norm(anchors[k0]) + \
+                (1.0 if ov0 else -1.0) * float(sphere_offset)
+        rr = np.linalg.norm(pts, axis=1)
+        scale = np.where(rr > 1e-9, new_r / np.maximum(rr, 1e-9), 1.0)
+        comps[ci] = pts * scale[:, None]
+    messages.append("[fix] xyz layered rebuild: %d arc conflict pair(s), "
+                    "%d gadget-threading arc(s); diagram needs %d radial "
+                    "layer(s) (spacing %.1f)."
+                    % (sum(len(c) for c in conflict) // 2,
+                       sum(1 for t in threader if t), L, lam))
+    return comps, L
+
+
+def _enforce_crossing_orders(comps, model, anchors, sphere_offset,
+                             ball_radius, messages, halfwidth=6):
+    """V5.4: verify and enforce the DT over/under RADIAL order at every
+    true crossing of the raw spherical curve.
+
+    Overlapping bump/dip profiles of nearby crossings can partially cancel,
+    silently flipping a crossing and changing the link type.  For each
+    crossing anchor, the two strand visits are recovered by nearest-anchor
+    segmentation, aligned with the model's per-component position lists,
+    and the radial order at their closest approach is checked against
+    model['over_at']; violations (or margins below sphere_offset) are
+    repaired by pushing the two visits radially apart around the crossing.
+    Returns (comps, n_fixed)."""
+    comps = [np.array(c, float) for c in comps]
+    anchors = np.asarray(anchors, float)
+    ncross = len(anchors)
+    # ---- segment each component into nearest-anchor (Voronoi) visit runs,
+    # in curve order; every point belongs to its nearest crossing, so the
+    # number of runs equals the number of crossing visits exactly.
+    visits_by_comp = []
+    for pts in comps:
+        d = np.linalg.norm(pts[:, None, :] - anchors[None, :, :], axis=2)
+        lab = np.argmin(d, axis=1)
+        runs = []
+        i = 0
+        n = len(pts)
+        while i < n:
+            j = i
+            while j + 1 < n and lab[j + 1] == lab[i]:
+                j += 1
+            runs.append([int(lab[i]), i, j])
+            i = j + 1
+        # merge fragments (wobble across a Voronoi boundary) and wraparound
+        merged = []
+        for r in runs:
+            if merged and merged[-1][0] == r[0]:
+                merged[-1][2] = r[2]
+            else:
+                merged.append(list(r))
+        if len(merged) > 1 and merged[0][0] == merged[-1][0]:
+            merged[0] = [merged[0][0],
+                         merged[-1][1] - len(pts), merged[0][2]]
+            merged.pop()
+        # gap-tolerant clustering: Voronoi boundaries oscillate inside
+        # tight gadget clusters, splitting one true visit into several
+        # interleaved runs; re-merge same-anchor runs whose index gap is
+        # smaller than a gadget span.
+        gap_pts = max(6, int(round(ball_radius / max(
+            1.0e-9, float(np.median(np.linalg.norm(
+                np.diff(pts, axis=0), axis=1)))))))
+        clustered = []
+        last_of = {}
+        for kk, i0, j0 in merged:
+            if kk in last_of and i0 - clustered[last_of[kk]][2] <= gap_pts:
+                clustered[last_of[kk]][2] = j0
+            else:
+                clustered.append([kk, i0, j0])
+                last_of[kk] = len(clustered) - 1
+        # wraparound cluster merge
+        if len(clustered) > 1 and clustered[0][0] == clustered[-1][0] and \
+                (clustered[0][1] + n - clustered[-1][2]) <= gap_pts:
+            clustered[0] = [clustered[0][0],
+                            clustered[-1][1] - n, clustered[0][2]]
+            clustered.pop()
+        # attach each run's closest approach to its anchor
+        out_runs = []
+        for kk, i0, j0 in clustered:
+            idxs = [t % n for t in range(i0, j0 + 1)]
+            dmin = float(np.min(d[idxs, kk]))
+            out_runs.append((kk, i0, j0, dmin))
+        visits_by_comp.append(out_runs)
+    # ---- expected visit sequences from the model
+    exp_cross, exp_over = [], []
+    for cp in model["comp_positions"]:
+        exp_cross.append([model["pos_cross"][p] for p in cp])
+        exp_over.append([bool(model["over_at"][p]) for p in cp])
+    # ---- order-aware matching of clustered runs to expected visits
+    per_cross = {}
+    ok_align = True
+    for ci, runs in enumerate(visits_by_comp):
+        want = exp_cross[ci]
+        matched = _match_visit_sequence(runs, want)
+        if matched is None:
+            # fused U-turn visits: split deficient ids at the distance
+            # profile's two minima, then retry once
+            from collections import Counter as _C
+            have = _C(r[0] for r in runs)
+            need = _C(want)
+            pts = comps[ci]
+            n = len(pts)
+            new_runs = []
+            for (kk, i0, j0, dmin) in runs:
+                if have[kk] < need.get(kk, 0):
+                    idxs = [t % n for t in range(i0, j0 + 1)]
+                    prof = np.linalg.norm(
+                        pts[idxs] - anchors[kk][None, :], axis=1)
+                    if len(prof) >= 5:
+                        a_ = int(np.argmin(prof))
+                        prof2 = prof.copy()
+                        prof2[max(0, a_ - 2):a_ + 3] = np.inf
+                        b_ = int(np.argmin(prof2))
+                        lo_, hi_ = sorted((a_, b_))
+                        cut = lo_ + int(np.argmax(prof[lo_:hi_ + 1]))
+                        new_runs.append((kk, i0, i0 + cut,
+                                         float(prof[:cut + 1].min())))
+                        new_runs.append((kk, i0 + cut + 1, j0,
+                                         float(prof[cut + 1:].min())))
+                        continue
+                new_runs.append((kk, i0, j0, dmin))
+            matched = _match_visit_sequence(new_runs, want)
+        if matched is None:
+            import os as _os
+            if _os.environ.get("V54_DEBUG"):
+                messages.append("[dbg] comp %d want=%r" % (ci, want))
+                messages.append("[dbg] comp %d runs=%r"
+                                % (ci, [r[0] for r in runs]))
+            ok_align = False
+            break
+        for t, k in enumerate(want):
+            per_cross.setdefault(k, []).append(
+                (ci, tuple(matched[t][:3]), exp_over[ci][t]))
+    if not ok_align:
+        messages.append("[WARN] xyz crossing-order check: could not align "
+                        "curve visits with the diagram; skipped.")
+        return comps, -1
+    n_fixed = 0
+    for _sweep in range(4):
+        fixed_this = 0
+        for k, pair in per_cross.items():
+            if len(pair) != 2:
+                continue
+            (c1, (a1, i1, j1), ov1), (c2, (a2, i2, j2), ov2) = pair
+            if ov1 == ov2:
+                continue
+            n1, n2 = len(comps[c1]), len(comps[c2])
+            idx1 = [t % n1 for t in range(i1, j1 + 1)]
+            idx2 = [t % n2 for t in range(i2, j2 + 1)]
+            # the crossing passage = each run's closest point to the anchor
+            d1 = np.linalg.norm(comps[c1][idx1] - anchors[k][None, :], axis=1)
+            d2 = np.linalg.norm(comps[c2][idx2] - anchors[k][None, :], axis=1)
+            a = int(np.argmin(d1)); b = int(np.argmin(d2))
+            p1, p2 = comps[c1][idx1[a]], comps[c2][idx2[b]]
+            r1, r2 = np.linalg.norm(p1), np.linalg.norm(p2)
+            margin = (r1 - r2) if ov1 else (r2 - r1)
+            if margin >= 0.9 * float(sphere_offset):
+                continue
+            fixed_this += 1
+            deficit = 0.9 * float(sphere_offset) - margin
+            for (cc, center, sgn_over) in ((c1, idx1[a], ov1),
+                                           (c2, idx2[b], ov2)):
+                sgn = 1.0 if sgn_over else -1.0
+                nn = len(comps[cc])
+                for t in range(-halfwidth, halfwidth + 1):
+                    w = math.exp(-(t * t) / (0.5 * halfwidth ** 2))
+                    m_ = (center + t) % nn
+                    pt = comps[cc][m_]
+                    rr = np.linalg.norm(pt)
+                    if rr > 1.0e-9:
+                        comps[cc][m_] = pt * (
+                            1.0 + sgn * 0.55 * deficit * w / rr)
+        n_fixed += fixed_this
+        if fixed_this == 0:
+            break
+    if n_fixed:
+        messages.append("[fix] xyz crossing-order repair: re-enforced the "
+                        "DT over/under radial order at %d crossing(s)."
+                        % n_fixed)
+    # ---- evict gadget threaders: a strand that merely passes near a
+    # crossing it does not belong to must NOT run radially BETWEEN that
+    # crossing's over and under strands (that silently threads the
+    # crossing and changes the link).  Push such runs fully above or
+    # below the gadget, whichever side they already favor.
+    member_pts = {}
+    for k, pair in per_cross.items():
+        s = set()
+        for (cc, (aa, ii, jj), ov) in pair:
+            nn = len(comps[cc])
+            for t in range(ii - 2, jj + 3):
+                s.add((cc, t % nn))
+        member_pts[k] = s
+    n_evict = 0
+    core = 0.65 * float(ball_radius)
+    for k in range(ncross):
+        if k not in per_cross or len(per_cross[k]) != 2:
+            continue
+        Ra = float(np.linalg.norm(anchors[k]))
+        lo_r = Ra - float(sphere_offset)
+        hi_r = Ra + float(sphere_offset)
+        pad = 0.6 * float(sphere_offset)
+        for cc in range(len(comps)):
+            pts = comps[cc]
+            nn = len(pts)
+            d = np.linalg.norm(pts - anchors[k][None, :], axis=1)
+            inside = d < core
+            if not inside.any():
+                continue
+            # contiguous runs of inside points, skipping member points
+            i = 0
+            while i < nn:
+                if not inside[i] or (cc, i) in member_pts[k]:
+                    i += 1
+                    continue
+                j = i
+                while j + 1 < nn and inside[j + 1] and \
+                        (cc, j + 1) not in member_pts[k]:
+                    j += 1
+                idxs = list(range(i, j + 1))
+                rads = np.linalg.norm(pts[idxs], axis=1)
+                if np.all(rads > hi_r + 0.2 * pad) or \
+                        np.all(rads < lo_r - 0.2 * pad):
+                    i = j + 1
+                    continue
+                n_evict += 1
+                go_out = float(np.mean(rads)) >= Ra
+                target = (hi_r + pad) if go_out else (lo_r - pad)
+                w_edge = 4
+                for t_, m_ in enumerate(idxs):
+                    # smooth blend at the run edges
+                    wl = min(1.0, (t_ + 1) / float(w_edge))
+                    wr = min(1.0, (len(idxs) - t_) / float(w_edge))
+                    w = min(wl, wr)
+                    rr = np.linalg.norm(pts[m_])
+                    if rr > 1.0e-9:
+                        want_r = (1 - w) * rr + w * target
+                        if go_out:
+                            want_r = max(rr, want_r)
+                        else:
+                            want_r = min(rr, want_r)
+                        comps[cc][m_] = pts[m_] * (want_r / rr)
+                i = j + 1
+    if n_evict:
+        messages.append("[fix] xyz gadget-threading repair: pushed %d "
+                        "passing strand run(s) clear of foreign "
+                        "crossings." % n_evict)
+    return comps, n_fixed + n_evict
+
+
+def _run_xyz_repair_stage(xyz_components, clearance, stage, messages,
+                          anchors=None, exclude_radius=0.0):
+    comps, rep = _repair_xyz_clearance(xyz_components, clearance,
+                                       anchors=anchors,
+                                       exclude_radius=exclude_radius)
+    if rep["initial"]:
+        messages.append(
+            "[fix] xyz %s: separated %d close approaches (< %.2f) in %d "
+            "passes; %s; est. %d radial layer(s), max push %.2f"
+            % (stage, rep["initial"], clearance, rep["iters"],
+               "all resolved" if rep["resolved"] else
+               "WARNING: NOT fully resolved", rep["layers"],
+               rep["max_push"]))
+    return comps, rep
+
+
+def audit_xyz_components(xyz_components, dt_string):
+    """Deep topology audit via audit_xyz.py (needs spherogram + snappy)."""
+    try:
+        import audit_xyz as _ax
+    except Exception as e:
+        return {"status": "unavailable", "detail": str(e)[:80]}
+    return _ax.audit_components_against_dt(xyz_components, dt_string)
 
 
 def build_spherical_xyz_components(
@@ -4054,9 +5196,29 @@ def build_spherical_xyz_components(
     surface_tube=0.35,
     surface_orient=0.0,
     surface_tilt=0.0,
+    skeleton_out=None,
+    skeleton_grid=24,
+    xyz_repair=True,
+    xyz_clearance=None,
+    audit_dt=None,
+    status_messages=None,
 ):
     """
     Return one Nx3 array per component for the spherical diagram.
+
+    V5.4: when ``xyz_repair`` is on (default), a clearance-repair pass runs
+    after the raw build, after smoothing, and after the surface warp,
+    separating any two non-neighboring arcs closer than ``xyz_clearance``
+    (default 0.8 * sphere_offset) into distinct radial layers.  When
+    ``audit_dt`` is given (the DT string), a final topology audit checks
+    that the finished 3D curve realizes that link (requires spherogram +
+    snappy; see audit_xyz.py).  Messages are appended to
+    ``status_messages`` (a list) if provided, else printed.
+
+    ``skeleton_out``, when given a dict, is filled with the 'mapped skeleton':
+    ``points`` (one 3D anchor per crossing, same indexing as the crossing IDs),
+    ``segments`` (one polyline per strand step between crossings), warped onto
+    the same surface as the curve.  Kamada sphere layouts only.
 
     Parameter units:
       sphere_radius and crossing_offset are absolute XYZ coordinate distances.
@@ -4099,6 +5261,19 @@ def build_spherical_xyz_components(
         raise ValueError("--xyz-smooth-passes must be non-negative.")
 
     layout = str(sphere_layout or "spherical-kamada").strip().lower()
+    if skeleton_out is None and layout in ("spherical-kamada", "shaped-kamada"):
+        skeleton_out = {}          # V5.4: anchors needed for clearance repair
+    _stereo_safe = (layout == "stereo-safe")
+    if _stereo_safe:
+        # V5.4 correct-by-construction mode: lift the AUDITED planar layout
+        # stereographically with radial crossing bumps and do not move
+        # angular positions afterwards (strands disjoint in the 2D layout
+        # can then never intersect in 3D).  Smoothing and clearance repair
+        # are disabled because both move positions and would void the
+        # guarantee; the topology audit still runs as a check.
+        layout = "stereographic"
+        xyz_final_smooth = False
+        xyz_repair = False
     if layout == "stereographic":
         xyz_components = _build_stereo_xyz_components(
             model,
@@ -4108,7 +5283,7 @@ def build_spherical_xyz_components(
             sphere_extent=sphere_extent,
             sphere_offset=sphere_offset,
             sphere_bump_frac=sphere_bump_frac,
-            xyz_spacing=xyz_spacing,
+            xyz_spacing=(0.6 * xyz_spacing if _stereo_safe else xyz_spacing),
         )
     elif layout in ("spherical-kamada", "shaped-kamada"):
         # Both use the sphere-native construction; shaped-kamada additionally
@@ -4122,9 +5297,25 @@ def build_spherical_xyz_components(
             xyz_spacing=xyz_spacing,
             crossing_angle=sphere_crossing_angle,
             direct_connecting=direct_connecting,
+            skeleton_out=skeleton_out,
+            skeleton_grid=skeleton_grid,
         )
     else:
         raise ValueError("Unknown --sphere-layout %r." % sphere_layout)
+
+    _msgs = status_messages if status_messages is not None else []
+    _clr = float(xyz_clearance) if xyz_clearance else 0.8 * float(sphere_offset)
+    _excl = max(2.4 * float(sphere_offset),
+                float(sphere_radius) * math.sin(sphere_crossing_angle))
+    _anch = None
+    if skeleton_out is not None and skeleton_out.get("points") is not None \
+            and len(skeleton_out.get("points", [])):
+        _anch = np.asarray(skeleton_out["points"], float) * (
+            float(sphere_radius) if skeleton_out.get("unit") else 1.0)
+    if xyz_repair and _clr > 0.0:
+        xyz_components, _ = _run_xyz_repair_stage(
+            xyz_components, _clr, "raw build", _msgs,
+            anchors=_anch, exclude_radius=_excl)
 
     xyz_components = _apply_final_xyz_smoothing(
         xyz_components,
@@ -4135,8 +5326,14 @@ def build_spherical_xyz_components(
         smooth_passes=xyz_smooth_passes,
     )
 
+    if xyz_repair and _clr > 0.0:
+        xyz_components, _ = _run_xyz_repair_stage(
+            xyz_components, _clr, "post-smoothing", _msgs,
+            anchors=_anch, exclude_radius=_excl)
+
+    _warp_pts = None
     if layout == "shaped-kamada":
-        xyz_components = _warp_components_to_surface(
+        xyz_components, _warp_pts = _warp_components_to_surface(
             xyz_components,
             sphere_radius=sphere_radius,
             surface_shape=surface_shape,
@@ -4147,7 +5344,61 @@ def build_spherical_xyz_components(
             surface_auto_aspect=surface_auto_aspect,
             surface_orient=surface_orient,
             surface_tilt=surface_tilt,
+            return_warp=True,
         )
+
+    if xyz_repair and _clr > 0.0 and layout == "shaped-kamada":
+        _anch_w = _anch
+        if _anch is not None and _warp_pts is not None:
+            _anch_w = _warp_pts(np.asarray(_anch, float))
+        xyz_components, _ = _run_xyz_repair_stage(
+            xyz_components, _clr, "post-warp", _msgs,
+            anchors=_anch_w, exclude_radius=_excl)
+
+    if audit_dt:
+        _res = audit_xyz_components(xyz_components, audit_dt)
+        if _res["status"] == "ok":
+            _msgs.append("[ok] xyz topology audit: %s" % _res["detail"])
+        elif _res["status"] == "unavailable":
+            _msgs.append("[info] xyz topology audit skipped: %s"
+                         % _res["detail"])
+        else:
+            _msgs.append("[%s] xyz topology audit: %s"
+                         % ("WARN" if _res["status"] == "inconclusive"
+                            else "FAIL", _res["detail"]))
+            if _res["status"] == "FAIL":
+                if _stereo_safe:
+                    _msgs.append(
+                        "[hint] stereo-safe failed unexpectedly; do not use "
+                        "this XYZ output. Recheck the DT code and audit "
+                        "dependencies before investigating the curve."
+                    )
+                else:
+                    _msgs.append("[hint] dense diagrams overwhelm the kamada "
+                                 "sphere layouts; re-run with --sphere-layout "
+                                 "stereo-safe (correct by construction, "
+                                 "audited).")
+
+    if status_messages is None:
+        for _m in _msgs:
+            print(_m)
+
+    # V5.0: scale the unit skeleton to the sphere and put it through the same
+    # surface warp as the curve, so the overlay matches the drawn strands.
+    if skeleton_out is not None and skeleton_out.get("unit"):
+        _sk_pts = np.asarray(skeleton_out.get("points", np.zeros((0, 3))), float) * sphere_radius
+        _sk_segs = [np.asarray(s, float) * sphere_radius
+                    for s in skeleton_out.get("segments", [])]
+        _sk_wires = [np.asarray(w, float) * sphere_radius
+                     for w in skeleton_out.get("surface_wires", [])]
+        if _warp_pts is not None:
+            _sk_pts = _warp_pts(_sk_pts)
+            _sk_segs = [_warp_pts(s) for s in _sk_segs]
+            _sk_wires = [_warp_pts(w) for w in _sk_wires]
+        skeleton_out["points"] = _sk_pts
+        skeleton_out["segments"] = _sk_segs
+        skeleton_out["surface_wires"] = _sk_wires
+        skeleton_out["unit"] = False
 
     return xyz_components
 
@@ -4178,6 +5429,10 @@ def write_spherical_xyz(
     surface_tube=0.35,
     surface_orient=0.0,
     surface_tilt=0.0,
+    xyz_repair=True,
+    xyz_clearance=None,
+    audit_dt=None,
+    status_stream=None,
 ):
     """
     Write spherical component polylines as plain x y z coordinates.
@@ -4210,7 +5465,16 @@ def write_spherical_xyz(
         surface_tube=surface_tube,
         surface_orient=surface_orient,
         surface_tilt=surface_tilt,
+        xyz_repair=xyz_repair,
+        xyz_clearance=xyz_clearance,
+        audit_dt=audit_dt,
+        status_messages=(_v54_msgs := []),
     )
+    for _m in _v54_msgs:
+        if status_stream is not None:
+            status_stream.write(_m + "\n")
+        else:
+            print(_m)
     ensure_parent_dir(path)
     nd = max(3, int(decimals))
     fmt = "%%.%df %%.%df %%.%df\n" % (nd, nd, nd)
@@ -4228,6 +5492,364 @@ def write_spherical_xyz(
     return n_written
 
 
+
+
+# --------------------------------------------------------------------------- #
+#  7b. Illustrative 2D projections of the 3D curve (V5.0)
+# --------------------------------------------------------------------------- #
+PROJECTION_VIEW_PRESETS = {
+    # name: (elev, azim, roll) in degrees; matplotlib view_init conventions.
+    "top": (90.0, -90.0, 0.0),
+    "front": (0.0, -90.0, 0.0),
+    "side": (0.0, 0.0, 0.0),
+}
+PROJECTION_VIEW_CHOICES = ("current", "top", "front", "side")
+
+
+def _parse_projection_views(text):
+    """Parse a comma-separated view list; unknown names raise ValueError."""
+    views = []
+    for tok in str(text or "").replace(";", ",").split(","):
+        name = tok.strip().lower()
+        if not name:
+            continue
+        if name not in PROJECTION_VIEW_CHOICES:
+            raise ValueError(
+                "Unknown projection view %r (choices: %s)."
+                % (name, ", ".join(PROJECTION_VIEW_CHOICES))
+            )
+        if name not in views:
+            views.append(name)
+    return views or ["current"]
+
+
+def _projection_basis(elev_deg, azim_deg, roll_deg=0.0):
+    """
+    Orthonormal (right, up, toward-viewer) basis for an orthographic projection
+    with matplotlib-like elev/azim angles plus a roll about the view direction.
+    """
+    el = math.radians(float(elev_deg))
+    az = math.radians(float(azim_deg))
+    f = np.array([
+        math.cos(el) * math.cos(az),
+        math.cos(el) * math.sin(az),
+        math.sin(el),
+    ], float)                              # unit vector pointing at the viewer
+    zaxis = np.array([0.0, 0.0, 1.0])
+    r = np.cross(zaxis, f)
+    nr = float(np.linalg.norm(r))
+    if nr < 1.0e-9:                        # looking along +-z: pick x as right
+        r = np.array([1.0, 0.0, 0.0])
+    else:
+        r = r / nr
+    u = np.cross(f, r)
+    ro = math.radians(float(roll_deg or 0.0))
+    if abs(ro) > 1.0e-12:
+        cr, sr = math.cos(ro), math.sin(ro)
+        r, u = cr * r + sr * u, -sr * r + cr * u
+    return r, u, f
+
+
+def project_points_3d(arr, basis):
+    """Project Nx3 points; returns (Nx2 screen coords, N depths toward viewer)."""
+    r, u, f = basis
+    arr = np.asarray(arr, float)
+    if arr.size == 0:
+        return np.zeros((0, 2)), np.zeros(0)
+    xy = np.column_stack([arr.dot(r), arr.dot(u)])
+    return xy, arr.dot(f)
+
+
+def auto_projection_view(xyz_components, coarse_step=10.0, refine_step=2.0):
+    """
+    V5.1: search the view sphere for the direction that maximizes the WORST
+    component's projected roundness.
+
+    For a candidate view, each component's closed curve is projected and scored
+    by its isoperimetric ratio 4*pi*area/perimeter^2 (1 for a circle, ~0 for a
+    sliver).  The score of the view is the MINIMUM over components, so the
+    optimum is the view in which no ring degenerates to an edge-on line --
+    the failure mode of links whose rings lie in near-orthogonal planes.
+    Returns (elev, azim).
+    """
+    curves = []
+    for arr in xyz_components:
+        arr = np.asarray(arr, float)
+        if len(arr) < 8:
+            continue
+        k = max(1, len(arr) // 120)
+        curves.append(arr[::k])
+    if not curves:
+        return 25.0, -60.0
+
+    def _score(elev, azim):
+        basis = _projection_basis(elev, azim, 0.0)
+        worst = 1.0e9
+        for cur in curves:
+            xy, _d = project_points_3d(cur, basis)
+            x = xy[:, 0]; y = xy[:, 1]
+            x2 = np.roll(x, -1); y2 = np.roll(y, -1)
+            area = abs(0.5 * float(np.sum(x * y2 - x2 * y)))
+            per = float(np.sum(np.hypot(x2 - x, y2 - y)))
+            if per <= 1.0e-9:
+                return 0.0
+            worst = min(worst, 4.0 * math.pi * area / (per * per))
+        return worst
+
+    best = (25.0, -60.0)
+    best_s = -1.0
+    e = -80.0
+    while e <= 80.0 + 1.0e-9:
+        a = -180.0
+        while a < 180.0 - 1.0e-9:
+            s = _score(e, a)
+            if s > best_s:
+                best_s, best = s, (e, a)
+            a += float(coarse_step)
+        e += float(coarse_step)
+    e0, a0 = best
+    e = e0 - float(coarse_step)
+    while e <= e0 + float(coarse_step) + 1.0e-9:
+        a = a0 - float(coarse_step)
+        while a <= a0 + float(coarse_step) + 1.0e-9:
+            s = _score(e, a)
+            if s > best_s:
+                best_s, best = s, (e, a)
+            a += float(refine_step)
+        e += float(refine_step)
+    return best
+
+
+def render_projection_on_axis(ax, xyz_components, elev=25.0, azim=-60.0,
+                              roll=0.0, line_width=2.2, skeleton=None,
+                              show_skeleton=False, skeleton_ids=False,
+                              skeleton_fontsize=6.0, chunk=8, title=None,
+                              depth_fade=0.55, perspective=0.0,
+                              skeleton_only=False, fast=False,
+                              grid_color="0.82", grid_lw=0.4,
+                              show_chords=True, show_crossing_dots=False,
+                              grid_basis=None):
+    """
+    Draw an ILLUSTRATIVE 2D orthographic projection of the 3D curve.
+
+    The curve of each component is cut into short chunks that are depth-sorted
+    (matplotlib zorder) and stroked over a slightly wider white halo, so at
+    every apparent crossing of the projection the nearer strand visually passes
+    over the farther one with a clean under-strand gap -- the same reading as a
+    knot diagram, but produced from the 3D geometry.  This is the V5.0 route
+    for links whose flat 2D diagrams are unreadable.
+    """
+    import matplotlib.patheffects as _pe
+
+    basis = _projection_basis(elev, azim, roll)
+    grid_basis = basis if grid_basis is None else grid_basis
+    ax.clear()
+    ax.axis("off")
+
+    # Depth normalization across everything drawn (strands AND skeleton).
+    all_dep = []
+    proj = []
+    for arr in xyz_components:
+        arr = np.asarray(arr, float)
+        if len(arr) == 0:
+            proj.append((np.zeros((0, 2)), np.zeros(0)))
+            continue
+        closed = np.vstack([arr, arr[:1]])
+        xy, dep = project_points_3d(closed, basis)
+        proj.append((xy, dep))
+        all_dep.append(dep)
+    if not all_dep:
+        return
+    dmin = min(float(d.min()) for d in all_dep)
+    dmax = max(float(d.max()) for d in all_dep)
+    dspan = max(dmax - dmin, 1.0e-9)
+
+    # Optional perspective: a camera on the view axis at 'perspective' scene
+    # radii; nearer points are magnified.  Edge-on rings open into a lens.
+    persp = float(perspective or 0.0)
+    if persp > 0.0:
+        persp = max(persp, 1.2)
+        allxy = np.vstack([xy for xy, d in proj if len(xy)])
+        c2 = allxy.mean(axis=0)
+        r_scene = max(float(np.linalg.norm(allxy - c2, axis=1).max()),
+                      0.5 * dspan, 1.0e-9)
+        dcen = 0.5 * (dmin + dmax)
+        D = persp * r_scene
+
+        def _persp_apply(xy, dep):
+            fac = D / np.maximum(D - (dep - dcen), 1.0e-3 * r_scene)
+            return c2 + (xy - c2) * fac[:, None]
+    else:
+        def _persp_apply(xy, dep):
+            return xy
+
+    fade = min(1.0, max(0.0, float(depth_fade or 0.0)))
+
+    def _alpha_of(depth_mean):
+        if fade <= 0.0:
+            return 1.0
+        t = (float(depth_mean) - dmin) / dspan
+        return max(0.08, (1.0 - fade) + fade * (0.15 + 0.85 * t))
+
+    # Butt-capped halo: a round/projecting cap would overhang the chunk end and
+    # erase the strand's own continuation (drawn at a lower depth), producing a
+    # dashed artifact.  With a butt cap the halo ends exactly at the joint,
+    # which the overlapping neighbour chunk repaints.
+    halo = [_pe.Stroke(linewidth=float(line_width) * 2.8, foreground="white",
+                       capstyle="butt"),
+            _pe.Normal()]
+    if not skeleton_only:
+        for ci, (xy, dep) in enumerate(proj):
+            npts = len(xy)
+            if npts < 2:
+                continue
+            color = _default_color_of(ci)
+            xyp = _persp_apply(xy, dep)
+            if fast:
+                # Fast mode (live dragging): one plain line per component.
+                ax.plot(xyp[:, 0], xyp[:, 1], color=color,
+                        lw=max(1.0, 0.6 * float(line_width)), alpha=0.9)
+                continue
+            step = max(2, int(chunk))
+            # Chunks overlap by a full step on each side: the colour of a chunk
+            # then always covers the white-halo bleed of its neighbours at the
+            # joints, so the strand reads as continuous (gaps appear ONLY where
+            # a genuinely nearer strand crosses).  Closed curve -> wrap.
+            xy_ext = np.vstack([xyp, xyp[1:min(step + 1, npts)]])
+            next_len = len(xy_ext)
+            for i in range(0, npts - 1, step):
+                core = slice(i, min(i + step + 1, npts))
+                z = 10.0 + 5.0 * ((float(dep[core].mean()) - dmin) / dspan)
+                lo = max(0, i - step)
+                hi = min(i + 2 * step + 1, next_len)
+                ax.plot(xy_ext[lo:hi, 0], xy_ext[lo:hi, 1], color=color,
+                        lw=float(line_width), solid_capstyle="round",
+                        zorder=z, alpha=_alpha_of(dep[core].mean()),
+                        path_effects=halo)
+
+    if (show_skeleton or skeleton_only) and skeleton and len(skeleton.get("points", [])):
+        # V5.2: score_diagram-style mapped framework -- a light depth-shaded
+        # wireframe of the WHOLE mapped surface, NEUTRAL dark-gray strand
+        # chords (component colours stay reserved for the smooth strands), and
+        # black depth-faded crossing anchors.
+        pts = np.asarray(skeleton["points"], float)
+        pxy, pdep = project_points_3d(pts, basis)
+        pxy = _persp_apply(pxy, pdep)
+        # -- surface wireframe (drawn beneath everything, subtle depth shade).
+        for wirearr in skeleton.get("surface_wires", []):
+            warr = np.asarray(wirearr, float)
+            if len(warr) < 2:
+                continue
+            wxy, wdep = project_points_3d(warr, grid_basis)
+            wxy = _persp_apply(wxy, wdep)
+            half = max(4, len(wxy) // 10)
+            for j0 in range(0, len(wxy) - 1, half):
+                j1 = min(j0 + half + 1, len(wxy))
+                zt = ((float(wdep[j0:j1].mean()) - dmin) / dspan)
+                ax.plot(wxy[j0:j1, 0], wxy[j0:j1, 1], color=grid_color,
+                        lw=float(grid_lw), zorder=1.0 + zt,
+                        alpha=0.25 + 0.45 * max(0.0, min(1.0, zt)))
+        ss = np.linspace(0.0, 1.0, 13)
+        w0 = ((1.0 - ss) ** 2)[:, None]
+        w1 = (2.0 * (1.0 - ss) * ss)[:, None]
+        w2 = (ss ** 2)[:, None]
+        base_z = 30.0 if skeleton_only else 20.0
+        lw_fw = 1.6 if skeleton_only else 1.0
+        for si, segarr in enumerate(
+                skeleton.get("segments", []) if show_chords else []):
+            seg = np.asarray(segarr, float)
+            if len(seg) == 3:
+                arc = w0 * seg[0] + w1 * seg[1] + w2 * seg[2]
+            else:
+                arc = seg
+            sxy, sdep = project_points_3d(arc, basis)
+            sxy = _persp_apply(sxy, sdep)
+            for j in range(len(sxy) - 1):
+                dmid = 0.5 * (sdep[j] + sdep[j + 1])
+                zt = (float(dmid) - dmin) / dspan
+                ax.plot(sxy[j:j + 2, 0], sxy[j:j + 2, 1], color="0.30",
+                        lw=lw_fw, solid_capstyle="round",
+                        zorder=base_z + 5.0 * zt,
+                        alpha=_alpha_of(dmid) if fade > 0.0
+                        else (0.12 + 0.83 * zt))
+        if show_crossing_dots:
+            pa = np.array([(0.2 + 0.8 * ((d - dmin) / dspan)) for d in pdep])
+            ax.scatter(pxy[:, 0], pxy[:, 1], s=11.0, c="#222222",
+                       alpha=None, zorder=base_z + 5.5,
+                       edgecolors="none")
+            # Per-point alpha via colours (matplotlib scatter alpha is scalar).
+            try:
+                from matplotlib.colors import to_rgba
+                cols = [to_rgba("#222222", float(a)) for a in pa]
+                ax.collections[-1].set_facecolor(cols)
+            except Exception:
+                pass
+        if skeleton_ids:
+            for k in range(len(pxy)):
+                ax.annotate(
+                    str(k + 1), (pxy[k, 0], pxy[k, 1]),
+                    textcoords="offset points", xytext=(3, 3),
+                    fontsize=float(skeleton_fontsize), zorder=base_z + 6.0,
+                    bbox=dict(boxstyle="round,pad=0.12", fc="white",
+                              ec="0.6", lw=0.4, alpha=0.85),
+                )
+
+    ax.set_aspect("equal")
+    ax.relim()
+    ax.autoscale_view()
+    ax.margins(0.04)
+    if title:
+        ax.set_title(title, fontsize=9)
+
+
+def save_projection_images(xyz_components, base_path, views, elev, azim,
+                           roll=0.0, line_width=2.2, skeleton=None,
+                           show_skeleton=False, skeleton_ids=False,
+                           figsize=8.0, formats=("svg", "png"), dpi=200,
+                           depth_fade=0.55, perspective=0.0,
+                           skeleton_only=False, grid_color="0.82",
+                           grid_lw=0.4, show_chords=True,
+                           show_crossing_dots=False, fixed_grid=False,
+                           fixed_grid_view=None):
+    """
+    Write the requested projection views next to ``base_path`` (typically the
+    .xyz output).  File pattern: <base>_proj_<view>.<ext>.  Returns the list of
+    written paths.
+    """
+    import matplotlib.pyplot as _plt
+
+    stem = os.path.splitext(str(base_path))[0]
+    written = []
+    if fixed_grid_view is None:
+        fixed_grid_view = (float(elev), float(azim), float(roll))
+    grid_basis = (_projection_basis(*fixed_grid_view)
+                  if bool(fixed_grid) else None)
+    for name in views:
+        if name == "current":
+            e, a, r = float(elev), float(azim), float(roll)
+        else:
+            e, a, r = PROJECTION_VIEW_PRESETS[name]
+        fig, ax = _plt.subplots(figsize=(float(figsize), float(figsize)))
+        try:
+            render_projection_on_axis(
+                ax, xyz_components, elev=e, azim=a, roll=r,
+                line_width=line_width, skeleton=skeleton,
+                show_skeleton=show_skeleton, skeleton_ids=skeleton_ids,
+                depth_fade=depth_fade, perspective=perspective,
+                skeleton_only=skeleton_only,
+                grid_color=grid_color, grid_lw=grid_lw, show_chords=show_chords,
+                show_crossing_dots=show_crossing_dots,
+                grid_basis=grid_basis,
+                title="projection '%s' (elev=%g, azim=%g, roll=%g)" % (name, e, a, r),
+            )
+            for ext in formats:
+                path = "%s_proj_%s.%s" % (stem, name, ext)
+                ensure_parent_dir(path)
+                fig.savefig(path, dpi=dpi, bbox_inches="tight")
+                written.append(path)
+        finally:
+            _plt.close(fig)
+    return written
 
 
 # --------------------------------------------------------------------------- #
@@ -4270,7 +5892,33 @@ def set_equal_aspect_3d(ax, points):
     ax.set_zlim(mid_z - half, mid_z + half)
 
 
-def _open_xyz_viewer_window(parent, xyz_components, closed=True, title="Sphere XYZ preview"):
+def _xyz_audit_display(messages):
+    """Return (text, level) for the topology-audit lines in build messages."""
+    lines = [str(msg) for msg in (messages or ())
+             if "xyz topology audit" in str(msg) or str(msg).startswith("[hint]")]
+    text = "\n".join(lines)
+    if any(line.startswith("[FAIL]") for line in lines):
+        return text, "fail"
+    if any(line.startswith("[WARN]") for line in lines):
+        return text, "warn"
+    if any(line.startswith("[ok]") for line in lines):
+        return text, "ok"
+    if lines:
+        return text, "info"
+    return "[info] xyz topology audit was not run.", "info"
+
+
+def _audit_foreground(level):
+    return {
+        "ok": "#176b2c",
+        "fail": "#a40000",
+        "warn": "#8a5200",
+        "info": "#4b5563",
+    }.get(level, "#4b5563")
+
+
+def _open_xyz_viewer_window(parent, xyz_components, closed=True,
+                            title="Sphere XYZ preview", audit_messages=None):
     """Open a Tk popup with an interactive Matplotlib 3D view of components.
 
     This follows the same basic idea as view_xyzV3.py in the curve_it project:
@@ -4303,6 +5951,7 @@ def _open_xyz_viewer_window(parent, xyz_components, closed=True, title="Sphere X
     top.columnconfigure(1, weight=0)
     top.rowconfigure(0, weight=1)
     top.rowconfigure(1, weight=0)
+    top.rowconfigure(2, weight=0)
 
     fig = Figure(figsize=(7.6, 6.2), dpi=100)
     ax3 = fig.add_subplot(111, projection="3d")
@@ -4400,6 +6049,20 @@ def _open_xyz_viewer_window(parent, xyz_components, closed=True, title="Sphere X
     ttk.Button(controls, text="Close", command=top.destroy).grid(
         row=btn_row + 2, column=0, sticky="ew", pady=(10, 2)
     )
+
+    audit_text, audit_level = _xyz_audit_display(audit_messages)
+    audit_label = tk.Label(
+        top,
+        text=audit_text,
+        anchor="w",
+        justify="left",
+        wraplength=900,
+        padx=8,
+        pady=5,
+        relief="groove",
+        foreground=_audit_foreground(audit_level),
+    )
+    audit_label.grid(row=2, column=0, columnspan=2, sticky="ew", padx=4, pady=4)
 
     canvas3.draw_idle()
     return top
@@ -4517,11 +6180,21 @@ def prepare_diagram(args, status_stream=None):
         "hole_swap": bool(getattr(args, "hole_swap", False)),
         "ring_tilt": getattr(args, "ring_tilt", 90.0),
         "invert_ring": bool(getattr(args, "invert_ring", False)),
+        "ring_equalize": getattr(args, "ring_equalize", 0.0),
+        # sphere-stereo needs the parsed model to trace the strand arcs.
+        "model": model,
     }
     tutte_guides = {}
     P = compute_positions(G, args.layout, tutte_opts=tutte_opts, meta_out=tutte_guides)
-    # Optional post-layout relaxation that opens up strand pieces that sit closer
-    # than the requested minimum separation (0 = off).
+    # V5.0: optional planarity-guarded relaxation that evens out the node/edge
+    # distribution (0 passes = off), then the minimum-separation nudge.
+    _relax_passes = int(getattr(args, "relax_passes", 0) or 0)
+    if _relax_passes > 0:
+        P = relax_planar_layout(
+            P, G, passes=_relax_passes,
+            strength=float(getattr(args, "relax_strength", 0.5) or 0.0),
+            pinned=(tutte_guides or {}).get("pinned_nodes"),
+        )
     P = nudge_min_separation(P, G, getattr(args, "min_sep", 0.0))
     # Guide geometry (shape outline / PCA axis) must ride through the same drawing
     # transform as the node positions, using the pre-transform node centroid.
@@ -4800,8 +6473,71 @@ def run_pipeline(args, status_stream=None):
             surface_tube=getattr(args, "surface_tube", 0.35),
             surface_orient=getattr(args, "surface_orient", 0.0),
             surface_tilt=getattr(args, "surface_tilt", 0.0),
+            xyz_repair=not getattr(args, "no_xyz_repair", False),
+            xyz_clearance=(getattr(args, "xyz_clearance", 0.0) or None),
+            audit_dt=getattr(args, "dt", None),
+            status_stream=out,
         )
         out.write("[ok] wrote %s (%d xyz rows)\n" % (args.xyz_output, n_points))
+
+        if getattr(args, "save_projections", False):
+            _skel = {}
+            _comps3 = build_spherical_xyz_components(
+                data["model"], data["P"], data["centers"], G=data["graph"],
+                sphere_radius=args.sphere_radius,
+                sphere_extent=args.sphere_extent,
+                sphere_offset=args.sphere_offset,
+                sphere_bump_frac=args.sphere_bump_frac,
+                xyz_spacing=args.xyz_spacing,
+                sphere_layout=args.sphere_layout,
+                sphere_crossing_angle=args.sphere_crossing_angle,
+                direct_connecting=args.direct_connecting,
+                xyz_final_smooth=args.xyz_final_smooth,
+                xyz_smooth_window=args.xyz_smooth_window,
+                xyz_smooth_passes=args.xyz_smooth_passes,
+                surface_shape=getattr(args, "surface_shape", "ellipsoid"),
+                surface_auto_orient=bool(getattr(args, "surface_auto_orient", True)),
+                surface_auto_aspect=bool(getattr(args, "surface_auto_aspect", True)),
+                surface_aspect=getattr(args, "surface_aspect", 1.6),
+                surface_tube=getattr(args, "surface_tube", 0.35),
+                surface_orient=getattr(args, "surface_orient", 0.0),
+                surface_tilt=getattr(args, "surface_tilt", 0.0),
+                skeleton_out=_skel,
+                skeleton_grid=getattr(args, "proj_grid_density", 24),
+            )
+            _views = _parse_projection_views(getattr(args, "proj_views", "current,top"))
+            _pe_ = getattr(args, "proj_elev", 25.0)
+            _pa_ = getattr(args, "proj_azim", -60.0)
+            if getattr(args, "proj_auto_view", False):
+                _pe_, _pa_ = auto_projection_view(_comps3)
+                out.write("[proj] auto view: elev=%.1f azim=%.1f\n" % (_pe_, _pa_))
+            _written = save_projection_images(
+                _comps3, args.xyz_output, _views,
+                elev=_pe_,
+                azim=_pa_,
+                roll=getattr(args, "proj_roll", 0.0),
+                line_width=getattr(args, "proj_line_width", 2.2),
+                skeleton=_skel,
+                show_skeleton=bool(getattr(args, "proj_skeleton", False)),
+                skeleton_ids=bool(getattr(args, "proj_skeleton_ids", False)),
+                figsize=getattr(args, "figsize", 8.0),
+                dpi=getattr(args, "dpi", 200),
+                depth_fade=getattr(args, "proj_depth_fade", 0.55),
+                perspective=getattr(args, "proj_perspective", 0.0),
+                skeleton_only=bool(getattr(args, "proj_skeleton_only", False)),
+                grid_color=getattr(args, "proj_grid_color", "0.82"),
+                grid_lw=getattr(args, "proj_grid_lw", 0.4),
+                show_chords=not bool(getattr(args, "proj_hide_chords", False)),
+                show_crossing_dots=bool(getattr(args, "proj_crossing_dots", False)),
+                fixed_grid=bool(getattr(args, "proj_fixed_grid", False)),
+                fixed_grid_view=(
+                    getattr(args, "proj_elev", 25.0),
+                    getattr(args, "proj_azim", -60.0),
+                    getattr(args, "proj_roll", 0.0),
+                ),
+            )
+            for _pth in _written:
+                out.write("[ok] wrote %s\n" % _pth)
 
     if getattr(args, "no_image", False) and not args.table and not (getattr(args, "write_xyz", True) and args.xyz_output):
         out.write("[warn] nothing was written; enable an image, table, or XYZ output.\n")
@@ -4906,13 +6642,16 @@ def build_arg_parser():
     )
     ap.add_argument(
         "--layout",
-        choices=["tutte", "shaped-tutte", "holed-tutte", "planar", "spring", "kamada"],
+        choices=["tutte", "shaped-tutte", "holed-tutte", "sphere-stereo", "planar", "spring", "kamada"],
         default="tutte",
         help=(
             "Layout engine. 'tutte' is default. 'shaped-tutte' pins the Tutte "
             "boundary to a chosen convex shape (see --tutte-shape). 'holed-tutte' "
             "pins two faces (outer + auto-picked central hole) to the outer/inner "
-            "outlines of a holed shape and solves the ring. If false crossings are "
+            "outlines of a holed shape and solves the ring. 'sphere-stereo' lays "
+            "the diagram on the unit sphere and stereographically projects it "
+            "from the pole farthest from all strands (best for links whose rings "
+            "lie in near-orthogonal planes, e.g. Edwards-Venn AM5). If false crossings are "
             "detected, the chosen layout is kept and the artifacts are highlighted."
         ),
     )
@@ -5063,6 +6802,72 @@ def build_arg_parser():
             "apart (with a spring back to the layout). 0 = off. Try 0.02-0.05."
         ),
     )
+    ap.add_argument(
+        "--ring-equalize", type=float, default=0.0,
+        help=(
+            "holed-tutte only: strength 0..1 of a radial histogram equalization "
+            "across the ring width (angles kept), spreading crowded strands "
+            "evenly between the rims. 0 = off (classic harmonic ring)."
+        ),
+    )
+    ap.add_argument(
+        "--relax-passes", type=int, default=0,
+        help=(
+            "Planarity-guarded relaxation passes applied after any 2D layout "
+            "(rejected if a pass would introduce a straight-edge crossing). "
+            "0 = off; try 5-30 for congested diagrams."
+        ),
+    )
+    ap.add_argument(
+        "--relax-strength", type=float, default=0.5,
+        help="Step size 0..1 of each relaxation pass. Default: 0.5.",
+    )
+    ap.add_argument(
+        "--save-projections", action="store_true",
+        help=(
+            "Also write illustrative 2D orthographic projections of the 3D "
+            "curve (SVG+PNG per view in --proj-views) next to the XYZ output."
+        ),
+    )
+    ap.add_argument(
+        "--proj-views", default="current,top",
+        help=(
+            "Comma-separated projection views for --save-projections: "
+            "current, top, front, side. Default: current,top."
+        ),
+    )
+    ap.add_argument("--proj-elev", type=float, default=25.0,
+                    help="Elevation (deg) of the 'current' projection view. Default: 25.")
+    ap.add_argument("--proj-azim", type=float, default=-60.0,
+                    help="Azimuth (deg) of the 'current' projection view. Default: -60.")
+    ap.add_argument("--proj-roll", type=float, default=0.0,
+                    help="Roll (deg) about the view direction. Default: 0.")
+    ap.add_argument("--proj-line-width", type=float, default=2.2,
+                    help="Line width of projected strands (halo scales with it). Default: 2.2.")
+    ap.add_argument("--proj-skeleton", action="store_true",
+                    help="Overlay the mapped skeleton (crossing anchors + strand chords).")
+    ap.add_argument("--proj-skeleton-ids", action="store_true",
+                    help="Label skeleton anchors with crossing IDs.")
+    ap.add_argument("--proj-skeleton-only", action="store_true",
+                    help="Projections show ONLY the mapped framework (no smooth strands).")
+    ap.add_argument("--proj-depth-fade", type=float, default=0.55,
+                    help="Depth-cue transparency strength 0..1 for projections. Default: 0.55.")
+    ap.add_argument("--proj-perspective", type=float, default=0.0,
+                    help="0 = orthographic; else perspective camera distance in scene radii (try 2-4).")
+    ap.add_argument("--proj-grid-density", type=int, default=24,
+                    help="Meridian count of the surface wireframe (0 = no mesh). Default: 24.")
+    ap.add_argument("--proj-grid-color", default="0.82",
+                    help="Matplotlib colour of the surface wireframe. Default: 0.82.")
+    ap.add_argument("--proj-grid-lw", type=float, default=0.4,
+                    help="Line width of the surface wireframe. Default: 0.4.")
+    ap.add_argument("--proj-hide-chords", action="store_true",
+                    help="Hide the neutral framework chords between crossing anchors.")
+    ap.add_argument("--proj-crossing-dots", action="store_true",
+                    help="Show black crossing-anchor dots in the mapped framework (default: hidden).")
+    ap.add_argument("--proj-fixed-grid", action="store_true",
+                    help="Keep the mapped-surface grid fixed to the current view while strands rotate.")
+    ap.add_argument("--proj-auto-view", action="store_true",
+                    help="Pick the 'current' view automatically (maximizes the worst ring's projected roundness).")
     ap.add_argument("--title", default=None, help="Optional title for the figure.")
     ap.add_argument("--font-size", type=float, default=7.0, help="DT label font size. Default: 7.")
     ap.add_argument(
@@ -5107,14 +6912,16 @@ def build_arg_parser():
     )
     ap.add_argument(
         "--sphere-layout",
-        choices=["spherical-kamada", "shaped-kamada", "stereographic"],
+        choices=["spherical-kamada", "shaped-kamada", "stereographic", "stereo-safe"],
         default="spherical-kamada",
         help=(
             "XYZ sphere layout. 'spherical-kamada' spreads the graph directly "
             "on S^2 and is the default; 'shaped-kamada' warps that spherical "
             "construction onto a shaped surface (see --surface-shape); "
             "'stereographic' uses the 2D diagram and inverse stereographic "
-            "projection."
+            "projection; 'stereo-safe' preserves the audited 2D angular "
+            "positions and is the correct-by-construction choice after a "
+            "Kamada topology-audit failure."
         ),
     )
     ap.add_argument(
@@ -5299,6 +7106,15 @@ def build_arg_parser():
         help=argparse.SUPPRESS,
     )
     ap.add_argument(
+        "--xyz-clearance", type=float, default=0.0,
+        help="V5.4: minimum 3D distance enforced between non-neighboring "
+             "strands (0 = auto: 0.8 * crossing offset). The clearance "
+             "repair separates crowded regions into extra radial layers.")
+    ap.add_argument(
+        "--no-xyz-repair", action="store_true",
+        help="V5.4: disable the 3D clearance repair (not recommended; dense "
+             "diagrams can otherwise render as the WRONG link).")
+    ap.add_argument(
         "--xyz-decimals", type=int, default=9,
         help="Decimal places written in the XYZ file. Default: 9.",
     )
@@ -5336,7 +7152,7 @@ def run_gui(initial_args):
         return 1
 
     apply_tk_window_icon(root, tk)
-    root.title("draw_dt_original_labelsV4_5")
+    root.title("draw_dt_original_labelsV5_4")
     root.geometry("1320x860")
     root.minsize(1050, 680)
 
@@ -5516,6 +7332,7 @@ def run_gui(initial_args):
         log_text.configure(state="normal")
         log_text.delete("1.0", "end")
         log_text.insert("1.0", text)
+        log_text.see("end")
         log_text.configure(state="disabled")
 
     # ------------------------------------------------------------------
@@ -5583,6 +7400,7 @@ def run_gui(initial_args):
 
     tab_2d = _make_scroll_tab("2D diagram")
     tab_3d = _make_scroll_tab("3D XYZ")
+    tab_view3d = _make_scroll_tab("3D view")
 
     # 'settings' points at the tab that new fields are added to; it is switched to
     # the 3D tab before the sphere-XYZ block below.  add_help_button / add_entry
@@ -5620,6 +7438,8 @@ def run_gui(initial_args):
     xyz_final_smooth_var = tk.BooleanVar(value=bool(getattr(initial_args, "xyz_final_smooth", True)))
     xyz_smooth_window_var = tk.StringVar(value=str(getattr(initial_args, "xyz_smooth_window", 10)))
     xyz_smooth_passes_var = tk.StringVar(value=str(getattr(initial_args, "xyz_smooth_passes", 5)))
+    xyz_clearance_var = tk.StringVar(value=str(getattr(initial_args, "xyz_clearance", 0.0)))
+    xyz_repair_var = tk.BooleanVar(value=not bool(getattr(initial_args, "no_xyz_repair", False)))
     xyz_decimals_var = tk.StringVar(value=str(initial_args.xyz_decimals))
     xyz_close_var = tk.BooleanVar(value=bool(initial_args.xyz_close_components))
 
@@ -5647,6 +7467,9 @@ def run_gui(initial_args):
     invert_ring_var = tk.BooleanVar(value=bool(getattr(initial_args, "invert_ring", False)))
     ring_tilt_var = tk.StringVar(value=str(getattr(initial_args, "ring_tilt", 90.0)))
     min_sep_var = tk.StringVar(value=str(getattr(initial_args, "min_sep", 0.0)))
+    ring_equalize_var = tk.StringVar(value=str(getattr(initial_args, "ring_equalize", 0.0)))
+    relax_passes_var = tk.StringVar(value=str(getattr(initial_args, "relax_passes", 0)))
+    relax_strength_var = tk.StringVar(value=str(getattr(initial_args, "relax_strength", 0.5)))
     surface_shape_var = tk.StringVar(value=getattr(initial_args, "surface_shape", "ellipsoid"))
     surface_auto_orient_var = tk.BooleanVar(value=bool(getattr(initial_args, "surface_auto_orient", True)))
     surface_auto_aspect_var = tk.BooleanVar(value=bool(getattr(initial_args, "surface_auto_aspect", True)))
@@ -5654,6 +7477,23 @@ def run_gui(initial_args):
     surface_tube_var = tk.StringVar(value=str(getattr(initial_args, "surface_tube", 0.35)))
     surface_orient_var = tk.StringVar(value=str(getattr(initial_args, "surface_orient", 0.0)))
     surface_tilt_var = tk.StringVar(value=str(getattr(initial_args, "surface_tilt", 0.0)))
+    proj_elev_var = tk.StringVar(value=str(getattr(initial_args, "proj_elev", 25.0)))
+    proj_azim_var = tk.StringVar(value=str(getattr(initial_args, "proj_azim", -60.0)))
+    proj_roll_var = tk.StringVar(value=str(getattr(initial_args, "proj_roll", 0.0)))
+    proj_lw_var = tk.StringVar(value=str(getattr(initial_args, "proj_line_width", 2.2)))
+    proj_views_var = tk.StringVar(value=str(getattr(initial_args, "proj_views", "current,top")))
+    proj_skeleton_var = tk.BooleanVar(value=bool(getattr(initial_args, "proj_skeleton", False)))
+    proj_skeleton_ids_var = tk.BooleanVar(value=bool(getattr(initial_args, "proj_skeleton_ids", False)))
+    proj_save_with_xyz_var = tk.BooleanVar(value=bool(getattr(initial_args, "proj_save_with_xyz", False)))
+    proj_depth_fade_var = tk.StringVar(value=str(getattr(initial_args, "proj_depth_fade", 0.55)))
+    proj_perspective_var = tk.StringVar(value=str(getattr(initial_args, "proj_perspective", 0.0)))
+    proj_skeleton_only_var = tk.BooleanVar(value=bool(getattr(initial_args, "proj_skeleton_only", False)))
+    proj_grid_density_var = tk.StringVar(value=str(getattr(initial_args, "proj_grid_density", 24)))
+    proj_grid_color_var = tk.StringVar(value=str(getattr(initial_args, "proj_grid_color", "0.82")))
+    proj_grid_lw_var = tk.StringVar(value=str(getattr(initial_args, "proj_grid_lw", 0.4)))
+    proj_chords_var = tk.BooleanVar(value=not bool(getattr(initial_args, "proj_hide_chords", False)))
+    proj_crossing_dots_var = tk.BooleanVar(value=bool(getattr(initial_args, "proj_crossing_dots", False)))
+    proj_fixed_grid_var = tk.BooleanVar(value=bool(getattr(initial_args, "proj_fixed_grid", False)))
 
     # Registry of parameter widgets that are dynamically greyed out when they do
     # not apply to the current layout / sphere-layout / shape selection.  Each
@@ -5684,7 +7524,7 @@ def run_gui(initial_args):
     ttk.Label(settings, text="layout").grid(row=row, column=0, sticky="w", pady=3)
     ttk.Combobox(
         settings, textvariable=layout_var,
-        values=["tutte", "shaped-tutte", "holed-tutte", "planar", "spring", "kamada"],
+        values=["tutte", "shaped-tutte", "holed-tutte", "sphere-stereo", "planar", "spring", "kamada"],
         width=15, state="readonly"
     ).grid(row=row, column=1, sticky="w", pady=3)
     add_help_button(row, "layout")
@@ -5758,6 +7598,10 @@ def run_gui(initial_args):
     row += 1
     add_entry("ring tilt deg", ring_tilt_var, help_key="ring_tilt", key="ring_tilt")
     add_entry("min separation", min_sep_var, help_key="min_sep", key="min_sep")
+    add_entry("ring equalize", ring_equalize_var,
+              help_key="ring_equalize", key="ring_equalize")
+    add_entry("relax passes", relax_passes_var, help_key="relax_passes")
+    add_entry("relax strength", relax_strength_var, help_key="relax_strength")
 
     ttk.Label(settings, text="y direction").grid(row=row, column=0, sticky="w", pady=3)
     ttk.Combobox(
@@ -5840,7 +7684,7 @@ def run_gui(initial_args):
     ttk.Label(settings, text="sphere layout").grid(row=row, column=0, sticky="w", pady=3)
     ttk.Combobox(
         settings, textvariable=sphere_layout_var,
-        values=["spherical-kamada", "shaped-kamada", "stereographic"],
+        values=["spherical-kamada", "shaped-kamada", "stereographic", "stereo-safe"],
         width=18, state="readonly"
     ).grid(row=row, column=1, sticky="w", pady=3)
     add_help_button(row, "sphere_layout")
@@ -5906,6 +7750,17 @@ def run_gui(initial_args):
     row += 1
     add_entry("smooth window", xyz_smooth_window_var, help_key="xyz_smooth_window")
     add_entry("smooth passes", xyz_smooth_passes_var, help_key="xyz_smooth_passes")
+    add_entry("clearance (0=auto)", xyz_clearance_var,
+              help_key="xyz_clearance", key="xyz_clearance")
+    _xyz_repair_chk = ttk.Checkbutton(
+        settings,
+        text="repair 3D strand clearance",
+        variable=xyz_repair_var,
+    )
+    _xyz_repair_chk.grid(row=row, column=1, columnspan=2, sticky="w", pady=2)
+    add_help_button(row, "xyz_repair")
+    dynamic_widgets.setdefault("xyz_repair", []).append((_xyz_repair_chk, "check"))
+    row += 1
     add_entry("XYZ decimals", xyz_decimals_var, help_key="xyz_decimals")
     ttk.Checkbutton(
         settings,
@@ -5913,6 +7768,117 @@ def run_gui(initial_args):
         variable=xyz_close_var,
     ).grid(row=row, column=1, columnspan=2, sticky="w", pady=2)
     add_help_button(row, "xyz_close_components")
+    row += 1
+
+    # ------------------------------------------------------------------
+    # V5.0 third tab: illustrative 2D projections of the 3D curve.
+    # None of these variables triggers the 2D preview; the projection is only
+    # recomputed by the 'Redraw 3D projection' button (the 3D build is slow).
+    # ------------------------------------------------------------------
+    settings = tab_view3d
+    row = 0
+    ttk.Label(
+        settings,
+        text=("Illustrative 2D projection of the 3D curve\n"
+              "(uses the '3D XYZ' tab parameters; nearer strands\n"
+              "are drawn over farther ones with white halos)"),
+        foreground="gray25", justify="left",
+    ).grid(row=row, column=0, columnspan=3, sticky="w", pady=(2, 6))
+    row += 1
+    add_entry("view elevation deg", proj_elev_var, help_key="proj_elev")
+    add_entry("view azimuth deg", proj_azim_var, help_key="proj_azim")
+    add_entry("view roll deg", proj_roll_var, help_key="proj_roll")
+    add_entry("projection line width", proj_lw_var, help_key="proj_line_width")
+    add_entry("depth fade (0-1)", proj_depth_fade_var, help_key="proj_depth_fade")
+    add_entry("perspective (0=ortho)", proj_perspective_var, help_key="proj_perspective")
+    _proj_skel_chk = ttk.Checkbutton(
+        settings, text="show mapped skeleton", variable=proj_skeleton_var
+    )
+    _proj_skel_chk.grid(row=row, column=1, columnspan=2, sticky="w", pady=2)
+    add_help_button(row, "proj_skeleton")
+    row += 1
+    _proj_skel_ids_chk = ttk.Checkbutton(
+        settings, text="label skeleton with crossing IDs",
+        variable=proj_skeleton_ids_var,
+    )
+    _proj_skel_ids_chk.grid(row=row, column=1, columnspan=2, sticky="w", pady=2)
+    add_help_button(row, "proj_skeleton_ids")
+    row += 1
+    _proj_skel_only_chk = ttk.Checkbutton(
+        settings, text="skeleton only (framework view)",
+        variable=proj_skeleton_only_var,
+    )
+    _proj_skel_only_chk.grid(row=row, column=1, columnspan=2, sticky="w", pady=2)
+    add_help_button(row, "proj_skeleton_only")
+    row += 1
+    _proj_chords_chk = ttk.Checkbutton(
+        settings, text="framework chords (crossing links)",
+        variable=proj_chords_var,
+    )
+    _proj_chords_chk.grid(row=row, column=1, columnspan=2, sticky="w", pady=2)
+    add_help_button(row, "proj_chords")
+    row += 1
+    _proj_dots_chk = ttk.Checkbutton(
+        settings, text="crossing anchor dots",
+        variable=proj_crossing_dots_var,
+    )
+    _proj_dots_chk.grid(row=row, column=1, columnspan=2, sticky="w", pady=2)
+    add_help_button(row, "proj_crossing_dots")
+    row += 1
+    _proj_fixed_grid_chk = ttk.Checkbutton(
+        settings, text="fixed grid while rotating",
+        variable=proj_fixed_grid_var,
+    )
+    _proj_fixed_grid_chk.grid(row=row, column=1, columnspan=2, sticky="w", pady=2)
+    add_help_button(row, "proj_fixed_grid")
+    row += 1
+    add_entry("grid density (redraw)", proj_grid_density_var, help_key="proj_grid_density")
+    add_entry("grid color", proj_grid_color_var, help_key="proj_grid_color")
+    add_entry("grid line width", proj_grid_lw_var, help_key="proj_grid_lw")
+    add_entry("views to save", proj_views_var, width=22, help_key="proj_views")
+    ttk.Checkbutton(
+        settings,
+        text="'Save XYZ' also saves projections",
+        variable=proj_save_with_xyz_var,
+    ).grid(row=row, column=1, columnspan=2, sticky="w", pady=2)
+    add_help_button(row, "proj_save_with_xyz")
+    row += 1
+    ttk.Separator(settings, orient="horizontal").grid(
+        row=row, column=0, columnspan=4, sticky="ew", pady=(8, 6)
+    )
+    row += 1
+    _proj_redraw_btn = ttk.Button(
+        settings, text="Redraw 3D projection",
+        command=lambda: redraw_projection(),
+    )
+    _proj_redraw_btn.grid(row=row, column=0, columnspan=2, sticky="ew", pady=3)
+    add_help_button(row, "redraw_projection")
+    row += 1
+    _proj_auto_btn = ttk.Button(
+        settings, text="Auto view (avoid edge-on rings)",
+        command=lambda: auto_view_gui(),
+    )
+    _proj_auto_btn.grid(row=row, column=0, columnspan=2, sticky="ew", pady=3)
+    add_help_button(row, "proj_auto_view")
+    row += 1
+    ttk.Button(
+        settings, text="Save projection(s)",
+        command=lambda: save_projections_gui(),
+    ).grid(row=row, column=0, columnspan=2, sticky="ew", pady=3)
+    row += 1
+    ttk.Button(
+        settings, text="View XYZ (interactive 3D)",
+        command=lambda: view_xyz(),
+    ).grid(row=row, column=0, columnspan=2, sticky="ew", pady=3)
+    row += 1
+    ttk.Label(
+        settings,
+        text=("Quick-view buttons in the projection window\n"
+              "re-project the cached curve instantly; press\n"
+              "'Redraw 3D projection' after changing 3D XYZ\n"
+              "parameters or the DT code."),
+        foreground="gray40", justify="left",
+    ).grid(row=row, column=0, columnspan=3, sticky="w", pady=(4, 2))
     row += 1
 
     latest = {
@@ -6045,6 +8011,7 @@ def run_gui(initial_args):
         _set_dynamic("hole_swap", is_holed_tutte)
         _set_dynamic("invert_ring", is_holed_tutte)
         _set_dynamic("ring_tilt", is_holed_tutte)
+        _set_dynamic("ring_equalize", is_holed_tutte or layout == "sphere-stereo")
         _set_dynamic("tutte_decompress", tutte_family)
         _set_dynamic("tutte_com_expand", tutte_family)
 
@@ -6067,8 +8034,13 @@ def run_gui(initial_args):
         # Sphere knobs that only apply to the kamada family / stereographic.
         _set_dynamic("direct_connecting", kamada_family)
         _set_dynamic("sphere_crossing_angle", kamada_family)
-        _set_dynamic("sphere_bump", kamada_family)
-        _set_dynamic("sphere_extent", sl == "stereographic")
+        _set_dynamic("sphere_bump", True)
+        _set_dynamic("sphere_extent", sl in ("stereographic", "stereo-safe"))
+        _set_dynamic("xyz_repair", sl != "stereo-safe")
+        _set_dynamic(
+            "xyz_clearance",
+            sl != "stereo-safe" and bool(xyz_repair_var.get()),
+        )
 
     def collect_args():
         dt = dt_text.get("1.0", "end").strip()
@@ -6102,6 +8074,9 @@ def run_gui(initial_args):
             invert_ring=bool(invert_ring_var.get()),
             ring_tilt=_float_value(ring_tilt_var, "ring tilt deg"),
             min_sep=_float_value(min_sep_var, "min separation"),
+            ring_equalize=_float_value(ring_equalize_var, "ring equalize"),
+            relax_passes=_int_value(relax_passes_var, "relax passes"),
+            relax_strength=_float_value(relax_strength_var, "relax strength"),
             title=title_var.get().strip() or None,
             font_size=_float_value(font_var, "DT label font"),
             crossing_id_font_size=_float_value(cid_font_var, "crossing ID font"),
@@ -6124,6 +8099,8 @@ def run_gui(initial_args):
             xyz_final_smooth=bool(xyz_final_smooth_var.get()),
             xyz_smooth_window=_int_value(xyz_smooth_window_var, "smooth window"),
             xyz_smooth_passes=_int_value(xyz_smooth_passes_var, "smooth passes"),
+            xyz_clearance=_float_value(xyz_clearance_var, "XYZ clearance"),
+            no_xyz_repair=not bool(xyz_repair_var.get()),
             xyz_decimals=_int_value(xyz_decimals_var, "XYZ decimals"),
             xyz_close_components=bool(xyz_close_var.get()),
             surface_shape=surface_shape_var.get(),
@@ -6133,6 +8110,23 @@ def run_gui(initial_args):
             surface_tube=_float_value(surface_tube_var, "surface tube ratio"),
             surface_orient=_float_value(surface_orient_var, "surface orient deg"),
             surface_tilt=_float_value(surface_tilt_var, "surface tilt deg"),
+            proj_elev=_float_value(proj_elev_var, "view elevation deg"),
+            proj_azim=_float_value(proj_azim_var, "view azimuth deg"),
+            proj_roll=_float_value(proj_roll_var, "view roll deg"),
+            proj_line_width=_float_value(proj_lw_var, "projection line width"),
+            proj_views=proj_views_var.get().strip() or "current",
+            proj_skeleton=bool(proj_skeleton_var.get()),
+            proj_skeleton_ids=bool(proj_skeleton_ids_var.get()),
+            proj_save_with_xyz=bool(proj_save_with_xyz_var.get()),
+            proj_depth_fade=_float_value(proj_depth_fade_var, "depth fade"),
+            proj_perspective=_float_value(proj_perspective_var, "perspective"),
+            proj_skeleton_only=bool(proj_skeleton_only_var.get()),
+            proj_grid_density=_int_value(proj_grid_density_var, "grid density"),
+            proj_grid_color=proj_grid_color_var.get().strip() or "0.82",
+            proj_grid_lw=_float_value(proj_grid_lw_var, "grid line width"),
+            proj_hide_chords=not bool(proj_chords_var.get()),
+            proj_crossing_dots=bool(proj_crossing_dots_var.get()),
+            proj_fixed_grid=bool(proj_fixed_grid_var.get()),
         )
 
     def show_preview_error(message):
@@ -6340,9 +8334,23 @@ def run_gui(initial_args):
                 surface_tube=ns.surface_tube,
                 surface_orient=ns.surface_orient,
                 surface_tilt=ns.surface_tilt,
+                xyz_repair=not getattr(ns, 'no_xyz_repair', False),
+                xyz_clearance=(getattr(ns, 'xyz_clearance', 0.0) or None),
+                audit_dt=getattr(ns, 'dt', None),
+                status_stream=buf,
             )
-            set_log(buf.getvalue() + "[ok] wrote %s (%d xyz rows)\n" % (ns.xyz_output, n_points))
-            messagebox.showinfo("Saved", "Wrote XYZ coordinates:\n%s" % ns.xyz_output)
+            extra = ""
+            if bool(proj_save_with_xyz_var.get()):
+                try:
+                    written = _save_projection_files(ns, ns.xyz_output)
+                    extra = "".join("[ok] wrote %s\n" % p for p in written)
+                except Exception as pexc:
+                    extra = "[warn] projections failed: %s\n" % pexc
+            set_log(buf.getvalue() + "[ok] wrote %s (%d xyz rows)\n" % (ns.xyz_output, n_points) + extra)
+            messagebox.showinfo("Saved", "Wrote XYZ coordinates:\n%s%s" % (
+                ns.xyz_output,
+                ("\n\n+ %d projection file(s)" % extra.count("[ok]")) if extra.startswith("[ok]") else "",
+            ))
         except Exception as exc:
             msg = str(exc)
             set_log("[error] %s\n" % msg)
@@ -6413,6 +8421,10 @@ def run_gui(initial_args):
                 surface_tube=ns.surface_tube,
                 surface_orient=ns.surface_orient,
                 surface_tilt=ns.surface_tilt,
+                xyz_repair=not getattr(ns, 'no_xyz_repair', False),
+                xyz_clearance=(getattr(ns, 'xyz_clearance', 0.0) or None),
+                audit_dt=getattr(ns, 'dt', None),
+                status_stream=buf,
             )
             set_log(
                 buf.getvalue()
@@ -6429,10 +8441,373 @@ def run_gui(initial_args):
             set_log("[error] %s\n" % msg)
             messagebox.showerror("Error", msg)
 
+    # ------------------------------------------------------------------
+    # V5.0 projection window: persistent Toplevel showing the illustrative 2D
+    # projection.  The heavy 3D construction runs only in redraw_projection();
+    # the quick-view buttons re-project the cached curve instantly.
+    # ------------------------------------------------------------------
+    proj_cache = {
+        "components": None,
+        "skeleton": None,
+        "grid_view": None,
+        "audit_messages": [],
+    }
+    proj_win = {
+        "win": None,
+        "fig": None,
+        "ax": None,
+        "canvas": None,
+        "label": None,
+        "audit_label": None,
+    }
+
+    def _build_xyz_with_skeleton(ns, state, status_messages=None):
+        skel = {}
+        comps3 = build_spherical_xyz_components(
+            state["model"], state["P"], state["centers"], G=state["graph"],
+            sphere_radius=ns.sphere_radius,
+            sphere_extent=ns.sphere_extent,
+            sphere_offset=ns.sphere_offset,
+            sphere_bump_frac=ns.sphere_bump_frac,
+            xyz_spacing=ns.xyz_spacing,
+            sphere_layout=ns.sphere_layout,
+            sphere_crossing_angle=ns.sphere_crossing_angle,
+            direct_connecting=ns.direct_connecting,
+            xyz_final_smooth=ns.xyz_final_smooth,
+            xyz_smooth_window=ns.xyz_smooth_window,
+            xyz_smooth_passes=ns.xyz_smooth_passes,
+            surface_shape=ns.surface_shape,
+            surface_auto_orient=ns.surface_auto_orient,
+            surface_auto_aspect=ns.surface_auto_aspect,
+            surface_aspect=ns.surface_aspect,
+            surface_tube=ns.surface_tube,
+            surface_orient=ns.surface_orient,
+            surface_tilt=ns.surface_tilt,
+            skeleton_out=skel,
+            skeleton_grid=getattr(ns, "proj_grid_density", 24),
+            xyz_repair=not getattr(ns, "no_xyz_repair", False),
+            xyz_clearance=(getattr(ns, "xyz_clearance", 0.0) or None),
+            audit_dt=getattr(ns, "dt", None),
+            status_messages=status_messages,
+        )
+        return comps3, skel
+
+    def _set_projection_audit(messages):
+        proj_cache["audit_messages"] = list(messages or ())
+        label = proj_win.get("audit_label")
+        if label is None:
+            return
+        audit_text, audit_level = _xyz_audit_display(messages)
+        label.configure(
+            text=audit_text,
+            foreground=_audit_foreground(audit_level),
+        )
+
+    def _ensure_proj_window():
+        if proj_win["win"] is not None:
+            try:
+                if proj_win["win"].winfo_exists():
+                    return
+            except Exception:
+                pass
+        win = tk.Toplevel(root)
+        win.title("3D projection")
+        try:
+            apply_tk_window_icon(win)
+        except Exception:
+            pass
+        win.geometry("720x760")
+        frame = ttk.Frame(win, padding=4)
+        frame.pack(fill="both", expand=True)
+        frame.rowconfigure(1, weight=1)
+        frame.columnconfigure(0, weight=1)
+        bar = ttk.Frame(frame)
+        bar.grid(row=0, column=0, sticky="ew", pady=(0, 4))
+        for j in range(8):
+            bar.columnconfigure(j, weight=1)
+
+        def _bump(var, delta):
+            try:
+                var.set("%.6g" % (float(var.get()) + delta))
+            except Exception:
+                pass
+            _render_proj_from_cache()
+
+        def _preset(name):
+            e, a, r = PROJECTION_VIEW_PRESETS[name]
+            proj_elev_var.set("%.6g" % e)
+            proj_azim_var.set("%.6g" % a)
+            proj_roll_var.set("%.6g" % r)
+            _render_proj_from_cache()
+
+        ttk.Button(bar, text="Az -15", command=lambda: _bump(proj_azim_var, -15.0)).grid(row=0, column=0, sticky="ew", padx=1)
+        ttk.Button(bar, text="Az +15", command=lambda: _bump(proj_azim_var, 15.0)).grid(row=0, column=1, sticky="ew", padx=1)
+        ttk.Button(bar, text="El -15", command=lambda: _bump(proj_elev_var, -15.0)).grid(row=0, column=2, sticky="ew", padx=1)
+        ttk.Button(bar, text="El +15", command=lambda: _bump(proj_elev_var, 15.0)).grid(row=0, column=3, sticky="ew", padx=1)
+        ttk.Button(bar, text="Top", command=lambda: _preset("top")).grid(row=0, column=4, sticky="ew", padx=1)
+        ttk.Button(bar, text="Front", command=lambda: _preset("front")).grid(row=0, column=5, sticky="ew", padx=1)
+        ttk.Button(bar, text="Side", command=lambda: _preset("side")).grid(row=0, column=6, sticky="ew", padx=1)
+        ttk.Button(bar, text="Auto view", command=lambda: auto_view_gui()).grid(row=0, column=7, sticky="ew", padx=1)
+        ttk.Button(bar, text="Redraw 3D projection", command=lambda: redraw_projection()).grid(row=0, column=8, sticky="ew", padx=1)
+        bar.columnconfigure(8, weight=1)
+
+        pfig = Figure(figsize=(6.8, 6.8), dpi=100)
+        pax = pfig.add_subplot(111)
+        pax.axis("off")
+        pcanvas = FigureCanvasTkAgg(pfig, master=frame)
+        pcanvas.get_tk_widget().grid(row=1, column=0, sticky="nsew")
+        audit_text, audit_level = _xyz_audit_display(
+            proj_cache.get("audit_messages"))
+        audit_info = tk.Label(
+            frame,
+            text=audit_text,
+            anchor="w",
+            justify="left",
+            wraplength=690,
+            padx=6,
+            pady=4,
+            relief="groove",
+            foreground=_audit_foreground(audit_level),
+        )
+        audit_info.grid(row=2, column=0, sticky="ew", pady=(4, 2))
+        info = ttk.Label(frame, text="(no projection yet)", foreground="gray40")
+        info.grid(row=3, column=0, sticky="w")
+        proj_win.update({"win": win, "fig": pfig, "ax": pax, "canvas": pcanvas,
+                         "label": info, "audit_label": audit_info, "zoom": 1.0})
+
+        # V5.1 Chimera-style mouse navigation on the projection canvas:
+        # left-drag rotates (horizontal = azimuth, vertical = elevation) with a
+        # live fast redraw, releasing does the full halo render; the scroll
+        # wheel zooms about the view centre.
+        drag = {"on": False, "mode": "orbit", "x": 0.0, "y": 0.0,
+                "e": 0.0, "a": 0.0, "r": 0.0, "last": 0.0}
+
+        def _canvas_center():
+            try:
+                w = pcanvas.get_tk_widget()
+                return 0.5 * float(w.winfo_width()), 0.5 * float(w.winfo_height())
+            except Exception:
+                return 340.0, 340.0
+
+        def _on_press(event):
+            if event.button not in (1, 3):
+                return
+            drag["on"] = True
+            # Right-drag (or Shift+left-drag) rolls about the view axis,
+            # pivoting on the canvas centre; plain left-drag orbits.
+            shift = "shift" in str(getattr(event, "key", "") or "").lower()
+            drag["mode"] = "roll" if (event.button == 3 or shift) else "orbit"
+            drag["x"], drag["y"] = event.x, event.y
+            try:
+                drag["e"] = float(proj_elev_var.get())
+                drag["a"] = float(proj_azim_var.get())
+                drag["r"] = float(proj_roll_var.get())
+            except Exception:
+                drag["e"], drag["a"], drag["r"] = 25.0, -60.0, 0.0
+
+        def _on_motion(event):
+            if not drag["on"]:
+                return
+            now = time.time()
+            if now - drag["last"] < 0.05:      # ~20 fps throttle
+                return
+            drag["last"] = now
+            if drag["mode"] == "roll":
+                cx, cy = _canvas_center()
+                a0 = math.atan2(float(drag["y"]) - cy, float(drag["x"]) - cx)
+                a1 = math.atan2(float(event.y) - cy, float(event.x) - cx)
+                # Tk pixel y grows downward, so the sign gives the natural
+                # "grab and turn" feel.
+                new_r = drag["r"] + math.degrees(a1 - a0)
+                new_r = ((new_r + 180.0) % 360.0) - 180.0
+                proj_roll_var.set("%.6g" % new_r)
+                _render_proj_from_cache(fast=True)
+                return
+            dx = float(event.x - drag["x"])
+            dy = float(event.y - drag["y"])
+            new_a = drag["a"] - 0.4 * dx
+            new_e = min(89.9, max(-89.9, drag["e"] + 0.4 * dy))
+            new_a = ((new_a + 180.0) % 360.0) - 180.0
+            proj_azim_var.set("%.6g" % new_a)
+            proj_elev_var.set("%.6g" % new_e)
+            _render_proj_from_cache(fast=True)
+
+        def _on_release(event):
+            if not drag["on"]:
+                return
+            drag["on"] = False
+            _render_proj_from_cache(fast=False)
+
+        def _on_scroll(event):
+            f = 1.2 if getattr(event, "button", "") == "up" or getattr(event, "step", 0) > 0 else (1.0 / 1.2)
+            proj_win["zoom"] = min(40.0, max(0.2, float(proj_win.get("zoom", 1.0)) * f))
+            _render_proj_from_cache(fast=False)
+
+        pcanvas.mpl_connect("button_press_event", _on_press)
+        pcanvas.mpl_connect("motion_notify_event", _on_motion)
+        pcanvas.mpl_connect("button_release_event", _on_release)
+        pcanvas.mpl_connect("scroll_event", _on_scroll)
+
+    def _render_proj_from_cache(fast=False):
+        if proj_cache["components"] is None:
+            return
+        _ensure_proj_window()
+        try:
+            e = float(proj_elev_var.get()); a = float(proj_azim_var.get())
+            r = float(proj_roll_var.get()); lw = float(proj_lw_var.get())
+        except Exception:
+            e, a, r, lw = 25.0, -60.0, 0.0, 2.2
+        try:
+            df = float(proj_depth_fade_var.get())
+        except Exception:
+            df = 0.55
+        try:
+            pp = float(proj_perspective_var.get())
+        except Exception:
+            pp = 0.0
+        try:
+            glw = float(proj_grid_lw_var.get())
+        except Exception:
+            glw = 0.4
+        grid_basis = None
+        if bool(proj_fixed_grid_var.get()):
+            grid_view = proj_cache.get("grid_view") or (e, a, r)
+            try:
+                grid_basis = _projection_basis(*grid_view)
+            except Exception:
+                grid_basis = _projection_basis(e, a, r)
+        render_projection_on_axis(
+            proj_win["ax"], proj_cache["components"],
+            elev=e, azim=a, roll=r, line_width=lw,
+            skeleton=proj_cache["skeleton"],
+            show_skeleton=bool(proj_skeleton_var.get()),
+            skeleton_ids=bool(proj_skeleton_ids_var.get()),
+            depth_fade=df, perspective=pp,
+            skeleton_only=bool(proj_skeleton_only_var.get()),
+            grid_color=proj_grid_color_var.get().strip() or "0.82",
+            grid_lw=glw,
+            show_chords=bool(proj_chords_var.get()),
+            show_crossing_dots=bool(proj_crossing_dots_var.get()),
+            grid_basis=grid_basis,
+            fast=fast,
+        )
+        # Re-apply the wheel zoom about the view centre.
+        try:
+            zf = float(proj_win.get("zoom", 1.0))
+            if zf != 1.0:
+                x0, x1 = proj_win["ax"].get_xlim()
+                y0, y1 = proj_win["ax"].get_ylim()
+                cx, cy = 0.5 * (x0 + x1), 0.5 * (y0 + y1)
+                hx, hy = 0.5 * (x1 - x0) / zf, 0.5 * (y1 - y0) / zf
+                proj_win["ax"].set_xlim(cx - hx, cx + hx)
+                proj_win["ax"].set_ylim(cy - hy, cy + hy)
+        except Exception:
+            pass
+        proj_win["label"].configure(
+            text="elev=%.4g  azim=%.4g  roll=%.4g   left-drag = orbit, "
+                 "right/shift-drag = roll, wheel = zoom%s (cached curve; "
+                 "'Redraw 3D projection' after 3D XYZ / DT changes)"
+                 % (e, a, r, "; grid locked" if bool(proj_fixed_grid_var.get()) else "")
+        )
+        try:
+            (proj_win["canvas"].draw if fast else proj_win["canvas"].draw_idle)()
+        except Exception:
+            pass
+
+    def auto_view_gui():
+        try:
+            if proj_cache["components"] is None:
+                redraw_projection()
+                if proj_cache["components"] is None:
+                    return
+            e, a = auto_projection_view(proj_cache["components"])
+            proj_elev_var.set("%.6g" % e)
+            proj_azim_var.set("%.6g" % a)
+            _render_proj_from_cache()
+            set_log("[proj] auto view: elev=%.1f azim=%.1f\n" % (e, a))
+        except Exception as exc:
+            msg = str(exc)
+            set_log("[error] %s\n" % msg)
+            messagebox.showerror("Error", msg)
+
+    def redraw_projection():
+        try:
+            ns = collect_args()
+            buf = io.StringIO()
+            xyz_messages = []
+            state = compute_diagram_objects(ns, status_stream=buf)
+            comps3, skel = _build_xyz_with_skeleton(ns, state, xyz_messages)
+            proj_cache["components"] = comps3
+            proj_cache["skeleton"] = skel
+            proj_cache["grid_view"] = (ns.proj_elev, ns.proj_azim, ns.proj_roll)
+            n_points = sum(len(arr) for arr in comps3)
+            _ensure_proj_window()
+            _set_projection_audit(xyz_messages)
+            _render_proj_from_cache()
+            set_log(buf.getvalue() + "".join(msg + "\n" for msg in xyz_messages)
+                    + "[proj] rebuilt 3D curve (%d points, %d skeleton anchors).\n"
+                    % (n_points, len(skel.get("points", []))))
+        except Exception as exc:
+            msg = str(exc)
+            set_log("[error] %s\n" % msg)
+            messagebox.showerror("Error", msg)
+
+    def _save_projection_files(ns, base_path):
+        if proj_cache["components"] is None:
+            buf = io.StringIO()
+            xyz_messages = []
+            state = compute_diagram_objects(ns, status_stream=buf)
+            comps3, skel = _build_xyz_with_skeleton(ns, state, xyz_messages)
+            proj_cache["components"] = comps3
+            proj_cache["skeleton"] = skel
+            proj_cache["grid_view"] = (ns.proj_elev, ns.proj_azim, ns.proj_roll)
+            proj_cache["audit_messages"] = xyz_messages
+        views = _parse_projection_views(ns.proj_views)
+        return save_projection_images(
+            proj_cache["components"], base_path, views,
+            elev=ns.proj_elev, azim=ns.proj_azim, roll=ns.proj_roll,
+            line_width=ns.proj_line_width,
+            skeleton=proj_cache["skeleton"],
+            show_skeleton=bool(ns.proj_skeleton),
+            skeleton_ids=bool(ns.proj_skeleton_ids),
+            figsize=ns.figsize, dpi=ns.dpi,
+            depth_fade=ns.proj_depth_fade,
+            perspective=ns.proj_perspective,
+            skeleton_only=bool(ns.proj_skeleton_only),
+            grid_color=ns.proj_grid_color,
+            grid_lw=ns.proj_grid_lw,
+            show_chords=not bool(ns.proj_hide_chords),
+            show_crossing_dots=bool(ns.proj_crossing_dots),
+            fixed_grid=bool(ns.proj_fixed_grid),
+            fixed_grid_view=proj_cache.get("grid_view")
+            or (ns.proj_elev, ns.proj_azim, ns.proj_roll),
+        )
+
+    def save_projections_gui():
+        try:
+            ns = collect_args()
+            base = filedialog.asksaveasfilename(
+                title="Save projections (base name; _proj_<view>.svg/.png is appended)",
+                defaultextension=".xyz",
+                initialfile=os.path.basename(xyz_var.get().strip() or "link_sphere.xyz"),
+                filetypes=[("Base name (extension ignored)", "*.*")],
+            )
+            if not base:
+                return
+            written = _save_projection_files(ns, base)
+            set_log("".join("[ok] wrote %s\n" % p for p in written))
+            messagebox.showinfo("Saved", "Wrote %d projection file(s):\n%s"
+                                % (len(written), "\n".join(written)))
+        except Exception as exc:
+            msg = str(exc)
+            set_log("[error] %s\n" % msg)
+            messagebox.showerror("Error", msg)
+
     def view_xyz():
         try:
             ns = collect_args()
             buf = io.StringIO()
+            xyz_messages = []
             state = compute_diagram_objects(ns, status_stream=buf)
             xyz_components = build_spherical_xyz_components(
                 state["model"],
@@ -6457,6 +8832,10 @@ def run_gui(initial_args):
                 surface_tube=ns.surface_tube,
                 surface_orient=ns.surface_orient,
                 surface_tilt=ns.surface_tilt,
+                xyz_repair=not getattr(ns, "no_xyz_repair", False),
+                xyz_clearance=(getattr(ns, "xyz_clearance", 0.0) or None),
+                audit_dt=getattr(ns, "dt", None),
+                status_messages=xyz_messages,
             )
             n_points = sum(len(arr) for arr in xyz_components)
             _open_xyz_viewer_window(
@@ -6466,9 +8845,11 @@ def run_gui(initial_args):
                 title="Sphere XYZ: %s, R=%g, offset=%g" % (
                     ns.sphere_layout, ns.sphere_radius, ns.sphere_offset
                 ),
+                audit_messages=xyz_messages,
             )
             set_log(
                 buf.getvalue()
+                + "".join(msg + "\n" for msg in xyz_messages)
                 + "[view] generated %d XYZ points in memory.\n" % n_points
                 + "[info] The viewer closes components visually; saved-file closure is controlled by the close-component checkbox.\n"
             )
@@ -6490,12 +8871,21 @@ def run_gui(initial_args):
         "sphere_extent": sphere_extent_var, "sphere_offset": sphere_offset_var,
         "sphere_bump_frac": sphere_bump_var, "sphere_crossing_angle": sphere_angle_var,
         "xyz_spacing": xyz_spacing_var, "xyz_smooth_window": xyz_smooth_window_var,
-        "xyz_smooth_passes": xyz_smooth_passes_var, "xyz_decimals": xyz_decimals_var,
+        "xyz_smooth_passes": xyz_smooth_passes_var,
+        "xyz_clearance": xyz_clearance_var, "xyz_decimals": xyz_decimals_var,
         "tutte_shape": tutte_shape_var, "tutte_aspect": tutte_aspect_var,
         "tutte_corner_radius": tutte_corner_var, "tutte_decompress": tutte_decompress_var,
         "tutte_com_expand": tutte_com_expand_var, "tutte_orient": tutte_orient_var,
         "hole_ratio": hole_ratio_var, "ring_tilt": ring_tilt_var,
-        "min_sep": min_sep_var,
+        "min_sep": min_sep_var, "ring_equalize": ring_equalize_var,
+        "relax_passes": relax_passes_var, "relax_strength": relax_strength_var,
+        "proj_elev": proj_elev_var, "proj_azim": proj_azim_var,
+        "proj_roll": proj_roll_var, "proj_line_width": proj_lw_var,
+        "proj_views": proj_views_var, "proj_depth_fade": proj_depth_fade_var,
+        "proj_perspective": proj_perspective_var,
+        "proj_grid_density": proj_grid_density_var,
+        "proj_grid_color": proj_grid_color_var,
+        "proj_grid_lw": proj_grid_lw_var,
         "surface_shape": surface_shape_var, "surface_aspect": surface_aspect_var,
         "surface_tube": surface_tube_var, "surface_orient": surface_orient_var,
         "surface_tilt": surface_tilt_var,
@@ -6503,6 +8893,7 @@ def run_gui(initial_args):
     session_bool_vars = {
         "direct_connecting": direct_connecting_var,
         "xyz_final_smooth": xyz_final_smooth_var,
+        "xyz_repair": xyz_repair_var,
         "xyz_close_components": xyz_close_var,
         "show_crossing_ids": show_ids_var,
         "color_crossing_ids_by_overstrand": color_ids_var,
@@ -6515,6 +8906,13 @@ def run_gui(initial_args):
         "invert_ring": invert_ring_var,
         "surface_auto_orient": surface_auto_orient_var,
         "surface_auto_aspect": surface_auto_aspect_var,
+        "proj_skeleton": proj_skeleton_var,
+        "proj_skeleton_ids": proj_skeleton_ids_var,
+        "proj_save_with_xyz": proj_save_with_xyz_var,
+        "proj_skeleton_only": proj_skeleton_only_var,
+        "proj_chords": proj_chords_var,
+        "proj_crossing_dots": proj_crossing_dots_var,
+        "proj_fixed_grid": proj_fixed_grid_var,
     }
     session_text_widgets = {
         "dt": dt_text, "crossing_order": order_text, "crossing_map": map_text,
@@ -6594,14 +8992,13 @@ def run_gui(initial_args):
     ttk.Button(save_bar, text="Save XYZ", command=save_xyz).grid(
         row=0, column=2, sticky="ew", padx=2
     )
-    ttk.Button(save_bar, text="View XYZ", command=view_xyz).grid(
+    # V5.0: 'View XYZ' lives on the '3D view' tab now (with the projection
+    # controls), so the save row stays compact.
+    ttk.Button(save_bar, text="Save as session", command=save_session).grid(
         row=0, column=3, sticky="ew", padx=2
     )
-    ttk.Button(save_bar, text="Save as session", command=save_session).grid(
-        row=0, column=4, sticky="ew", padx=2
-    )
     ttk.Button(save_bar, text="Load session", command=load_session).grid(
-        row=0, column=5, sticky="ew", padx=2
+        row=0, column=4, sticky="ew", padx=2
     )
     def redraw_2d():
         # Clear the cached 3D-torus layout (and reroll its seed) so the holed-tutte
@@ -6610,7 +9007,7 @@ def run_gui(initial_args):
         update_preview()
 
     ttk.Button(save_bar, text="Redraw 2D", command=redraw_2d).grid(
-        row=0, column=6, sticky="ew", padx=2
+        row=0, column=5, sticky="ew", padx=2
     )
 
     ttk.Button(preview_control_bar, text="Zoom +", command=lambda: _zoom_preview(1.25)).grid(
@@ -6675,6 +9072,9 @@ def run_gui(initial_args):
         invert_ring_var,
         ring_tilt_var,
         min_sep_var,
+        ring_equalize_var,
+        relax_passes_var,
+        relax_strength_var,
     ]
     for var in watched_vars:
         var.trace_add("write", lambda *_args: schedule_preview())
@@ -6689,6 +9089,7 @@ def run_gui(initial_args):
         surface_shape_var,
         surface_auto_orient_var,
         surface_auto_aspect_var,
+        xyz_repair_var,
     ):
         var.trace_add("write", lambda *_a: _apply_dynamic_states())
 
@@ -6711,6 +9112,15 @@ def run_gui(initial_args):
     dt_text.bind("<<Paste>>", _collapse_dt_lines, add="+")
     dt_text.bind("<FocusOut>", _collapse_dt_lines, add="+")
     _collapse_dt_lines()  # tidy any multi-line initial/loaded value
+
+    def _proj_style_changed(*_a):
+        # Render-side styling only: re-render the cached curve (no 3D rebuild).
+        if proj_cache["components"] is not None:
+            _render_proj_from_cache()
+    for _v in (proj_chords_var, proj_crossing_dots_var, proj_fixed_grid_var,
+               proj_skeleton_var, proj_skeleton_ids_var,
+               proj_skeleton_only_var):
+        _v.trace_add("write", _proj_style_changed)
 
     _apply_dynamic_states()
     root.after(200, update_preview)

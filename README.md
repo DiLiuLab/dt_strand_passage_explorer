@@ -29,7 +29,8 @@ Development notes and version history are in [DEVELOPMENT_LOG.md](DEVELOPMENT_LO
 ```text
 strand_passage_guiV4_0.py        Main entry point: GUI, --nongui, and --demo
 link_engine_v4_0.py              Diagram engine and SnapPy bridge
-draw_dt_original_labelsV5_3.py   DT parser, layout, renderer, and standalone GUI
+draw_dt_original_labelsV5_4.py   DT parser, layout, renderer, XYZ audit, and GUI
+audit_xyz.py                     Audit a 3D XYZ curve against its signed DT link
 check_two_dt.py                  Standalone SnapPy/Sage DT-comparison utility
 find_link_in_snappy.py           Search SnapPy link databases for DT matches
 score_diagramV2_0.py             Generate, deduplicate, score, and rank diagrams
@@ -44,7 +45,7 @@ LICENSE                          MIT license
 Import chain:
 
 ```text
-strand_passage_guiV4_0 -> link_engine_v4_0 -> draw_dt_original_labelsV5_3
+strand_passage_guiV4_0 -> link_engine_v4_0 -> draw_dt_original_labelsV5_4
 ```
 
 ## Install
@@ -123,7 +124,7 @@ If the path does not end in `.xlsx`, the script adds it first. For example,
 directory and basename of the spreadsheet path.
 
 Custom displayed crossing IDs use the same syntax as
-`draw_dt_original_labelsV5_3.py`.  V4.0 adds a combined
+`draw_dt_original_labelsV5_4.py`.  V4.0 adds a combined
 `--crossing-labels` option: assignment-style text is detected as a crossing map,
 while a plain list is detected as crossing order.
 
@@ -153,7 +154,7 @@ Drawing settings:
 - V4.0 defaults strand-passage drawings to `shaped-tutte` with `tutte shape =
   ellipse` and `tutte aspect = 1.0`.
 - In the GUI, click `Load drawing session` to load a JSON session saved by
-  `draw_dt_original_labelsV5_3.py`. The saved 2-D drawing settings then apply to
+  `draw_dt_original_labelsV5_4.py`. The saved 2-D drawing settings then apply to
   the root diagram and following strand-passage diagrams.
 - In batch/demo modes, use `--drawing-session path/to/session.json`. If the
   session contains a DT code it is used when `--dt` is not supplied; explicit
@@ -161,6 +162,22 @@ Drawing settings:
 - Each diagram window has a `Simplify` button. It simplifies that current diagram
   with the active SnapPy/backtrack settings and refreshes the properties panel,
   including Jones data when Sage/SnapPy can compute it.
+
+Standalone drawing and audited XYZ export:
+
+```bash
+sage -python draw_dt_original_labelsV5_4.py --dt "DT: [(4,6,2)]"
+sage -python audit_xyz.py link_sphere.xyz "DT: [(4,6,2)]"
+```
+
+V5.4 audits each completed XYZ curve against the source DT link when Spherogram
+and SnapPy are available. `Save XYZ`, `View XYZ`, and `Redraw 3D projection`
+show `[ok]`, `[FAIL]`, or an `[info]` dependency-skip result in the main status
+log; the two interactive 3D windows also retain a color-coded audit banner.
+Dense Kamada layouts that fail should be rebuilt with `sphere layout =
+stereo-safe` (CLI: `--sphere-layout stereo-safe`). The `clearance (0=auto)` and
+`repair 3D strand clearance` GUI controls correspond to `--xyz-clearance` and
+`--no-xyz-repair`, and are saved in V5.4 session files.
 
 Spreadsheet columns to know:
 
@@ -280,7 +297,8 @@ To make the Python scripts directly executable on macOS/Linux:
 
 ```bash
 chmod +x strand_passage_guiV4_0.py
-chmod +x draw_dt_original_labelsV5_3.py
+chmod +x draw_dt_original_labelsV5_4.py
+chmod +x audit_xyz.py
 chmod +x check_two_dt.py
 chmod +x find_link_in_snappy.py
 ```
@@ -311,13 +329,16 @@ sage -python ./strand_passage_guiV4_0.py
   Arial, so text can be selected and edited in Illustrator/Inkscape. V3.8 also
   enlarges the surrounding label boxes/circles so the exported SVG better
   matches the live Matplotlib view in Illustrator.
-- Standalone SVGs from `draw_dt_original_labelsV5_3.py` use the same Arial
+- Standalone SVGs from `draw_dt_original_labelsV5_4.py` use the same Arial
   editable-text policy and roomier DT-label/crossing-ID boxes. V3.13 fixed
   over/under gaps at self-crossings such as the trefoil `DT: [(4,6,2)]`; V3.14
   keeps requested layouts even when they create false crossings, highlights
   those artifacts, and adds a visible metadata caption to saved diagrams. V4.5
   keeps the standalone helper GUI manageable by splitting parameters into
   separate 2-D diagram and 3-D XYZ tabs.
+- V5.4 adds topology-audited XYZ generation, clearance repair for Kamada
+  layouts, and the correct-by-construction `stereo-safe` layout. Audit results
+  are visible in the status log and both interactive 3D windows.
 - In the drawing helper GUI, saved SVG font sizes follow the live GUI fields:
   `DT label font` maps to `--font-size`, and `crossing ID font` maps to
   `--crossing-id-font-size`.

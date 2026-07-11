@@ -32,7 +32,7 @@ is resumable from a JSONL checkpoint.
 
 Requires SnapPy (``import snappy``); run under ``sage -python`` on the research
 machine for the full toolchain.  The metric engine is self-contained and imports
-the live ``link_engine_v4_0.py`` and ``draw_dt_original_labelsV5_3.py`` modules
+the live ``link_engine_v4_0.py`` and ``draw_dt_original_labelsV5_4.py`` modules
 from this folder.
 
 Usage
@@ -87,7 +87,7 @@ def _load_local(name, filename):
     return mod
 
 
-DDOL = _load_local("draw_dt_original_labelsV5_3", "draw_dt_original_labelsV5_3.py")
+DDOL = _load_local("draw_dt_original_labelsV5_4", "draw_dt_original_labelsV5_4.py")
 LE = _load_local("link_engine_v4_0", "link_engine_v4_0.py")
 
 try:

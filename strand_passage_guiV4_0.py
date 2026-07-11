@@ -16,7 +16,7 @@ What is new in V4.0
 * The strand-passage default drawing layout is now ``shaped-tutte`` with an
   ellipse boundary and manual Tutte aspect 1.0.
 * ``--drawing-session`` and the GUI "Load drawing session" button load drawing
-  settings from JSON sessions saved by ``draw_dt_original_labelsV5_3.py``.  GUI,
+  settings from JSON sessions saved by ``draw_dt_original_labelsV5_4.py``.  GUI,
   demo, and ``--nongui`` overview drawings reuse those settings for following
   strand-passage diagrams.
 * The top control strip has light-blue "?" help buttons for SnapPy/global and
@@ -28,7 +28,7 @@ What is new in V3.8
   overview text is set to Arial before figure construction, card/footer panels
   are slightly roomier, and text-background boxes have larger padding so the
   final SVG better matches the Matplotlib-rendered view in Illustrator.
-* Drawing/model layer is now ``draw_dt_original_labelsV5_3.py``; its editable
+* Drawing/model layer is now ``draw_dt_original_labelsV5_4.py``; its editable
   SVG text boxes/circles also use Arial and larger padding by default.
 
 What is new in V3.7
@@ -65,7 +65,7 @@ What is new in V3.4
 * Optional Tk window/task-menu icon loaded from ``assets/strand_passage_icon.png``
   when present.  Missing or unsupported icon assets are ignored, so the scripts
   still run from a plain source checkout.
-* Drawing/model layer is now ``draw_dt_original_labelsV5_3.py``.
+* Drawing/model layer is now ``draw_dt_original_labelsV5_4.py``.
 
 What is new in V3.3
 -------------------
@@ -81,7 +81,7 @@ What is new in V3.3
 
 What is new in V3.2
 -------------------
-* Drawing/model layer is now ``draw_dt_original_labelsV5_3.py``, and 2-D links
+* Drawing/model layer is now ``draw_dt_original_labelsV5_4.py``, and 2-D links
   are drawn with that helper's own
   DEFAULT settings (default layout, top-to-bottom orientation, and
   false-crossing visualization).
@@ -143,7 +143,7 @@ import numpy as np
 # backend so Sage/macOS never fails before the GUI's own backend fallback runs.
 os.environ.setdefault("MPLBACKEND", "Agg")
 
-import draw_dt_original_labelsV5_3 as D          # noqa: E402
+import draw_dt_original_labelsV5_4 as D          # noqa: E402
 import link_engine_v4_0 as E                       # noqa: E402
 
 TAB10_NAMES = ["blue", "orange", "green", "red", "purple",
@@ -359,7 +359,7 @@ def normalize_drawing_options(options=None):
 
 
 def load_drawing_session(path):
-    """Read a session JSON written by ``draw_dt_original_labelsV5_3.py``.
+    """Read a session JSON written by ``draw_dt_original_labelsV5_4.py``.
 
     Returns a small dict with drawing options plus optional DT/crossing-label
     settings.  Unknown helper-only 3-D fields are ignored.
@@ -2346,7 +2346,7 @@ def main():
                          "visit is the 'over' (default) or 'under' strand")
     ap.add_argument("--drawing-session", default=None, metavar="PATH",
                     help="load drawing settings from a JSON session saved by "
-                         "draw_dt_original_labelsV5_3.py")
+                         "draw_dt_original_labelsV5_4.py")
     ap.add_argument("--nongui", action="store_true",
                     help="write the two-pass strand-passage spreadsheet (.xlsx) "
                          "and overview SVG, then exit (needs SnapPy + pandas)")

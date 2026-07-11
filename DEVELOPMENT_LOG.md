@@ -4,6 +4,24 @@ DT Link Toolkit Development Log
 This file records version-specific development notes and implementation history.
 For installation and everyday usage, see README.md.
 
+draw_dt_original_labels V5.4 (2026-07-11)
+-----------------------------------------
+* Added `audit_xyz.py`, an importable and standalone Spherogram/SnapPy audit
+  that reconstructs the link represented by a finished 3D polyline and compares
+  it with the source signed DT link. Its dependencies are loaded lazily so
+  imports and `--help` still work outside the Sage/SnapPy environment.
+* Added the correct-by-construction `--sphere-layout stereo-safe`, which lifts
+  the audited planar layout stereographically and changes only radial position
+  at over/under crossings.
+* Added optional clearance repair for Kamada XYZ layouts (`--xyz-clearance`,
+  `--no-xyz-repair`) and exposed those controls in the standalone GUI and V5.4
+  session files.
+* `Save XYZ`, `View XYZ`, and `Redraw 3D projection` now use the same repair and
+  topology-audit pipeline. Audit results appear in the main status log and as
+  persistent color-coded banners in both interactive 3D windows.
+* strand_passage_guiV4_0.py, link_engine_v4_0.py, and score_diagramV2_0.py now
+  import draw_dt_original_labelsV5_4.py as the live drawing/model helper.
+
 draw_dt_original_labels V5.3 (2026-07-10)
 -----------------------------------------
 * Surface wireframe styling: --proj-grid-density (meridian count; parallels ~
@@ -23,8 +41,8 @@ draw_dt_original_labels V5.3 (2026-07-10)
 * The mapped-surface grid can be fixed to the last projection rebuild view while
   live orbit/roll rotates the strands (`fixed grid while rotating` /
   --proj-fixed-grid).
-* strand_passage_guiV4_0.py, link_engine_v4_0.py, and score_diagramV2_0.py now
-  import draw_dt_original_labelsV5_3.py as the live drawing/model helper.
+* At the V5.3 release, strand_passage_guiV4_0.py, link_engine_v4_0.py, and
+  score_diagramV2_0.py imported V5.3 as the live drawing/model helper.
 
 draw_dt_original_labels V5.2 (2026-07-10)
 -----------------------------------------
@@ -81,7 +99,7 @@ interior strands toward the pinned rims (uneven, edge-crowded 2D diagrams),
 and some links (e.g. the Edwards-Venn Brunnian family) have no readable flat
 diagram at all.
 
-New in draw_dt_original_labelsV5_0.py (V5.3 is now the live helper imported by
+New in draw_dt_original_labelsV5_0.py (V5.4 is now the live helper imported by
 the strand-passage and scoring tools):
 * --ring-equalize (holed-tutte): radial histogram equalization across the ring
   width after the harmonic solve; angles kept; 0..1 blend.
@@ -119,7 +137,8 @@ Files
 -----
     strand_passage_guiV4_0.py         (V4.0) interactive GUI + --nongui + --demo
     link_engine_v4_0.py               (V4.0) passage / DT-choice / SnapPy engine
-    draw_dt_original_labelsV5_3.py    (V5.3) drawing + model layer
+    draw_dt_original_labelsV5_4.py    (V5.4) drawing + model layer
+    audit_xyz.py                       XYZ topology audit helper / CLI
     check_two_dt.py                   standalone SnapPy/Sage utility: compare two
                                       DT codes (topology + Jones + backtrack test)
     find_link_in_snappy.py            standalone SnapPy database search utility
@@ -176,7 +195,7 @@ What is new in V4.0 (GUI simplify + drawing sessions)
     visualization.  These defaults apply in the GUI, `--demo`, `--nongui`
     overview SVG, and following strand-passage diagrams.
   * Added `--drawing-session PATH` plus the GUI `Load drawing session` button.
-    Sessions saved by draw_dt_original_labelsV5_3.py supply DT/crossing labels
+    Sessions saved by draw_dt_original_labelsV5_4.py supply DT/crossing labels
     and 2-D drawing settings; explicit `--dt` still takes priority in CLI modes.
   * Moved `Close passage windows` and `Load drawing session` to the second
     control row beside the crossing-label field, and added light-blue `?` help
@@ -188,9 +207,10 @@ Scoring utility V2.0
   * Added score_diagramV2_0.py, a standalone Sage/SnapPy utility for generating
     alternative simplified diagrams of one link, deduplicating signed diagram
     isomorphs, scoring each representative, and writing Excel/SVG/JSON reports.
-  * The tool imports the live V4.0 engine and V4.5 drawing helper, uses the same
-    backtrack-simplify mechanism for generation, and scores canonical DT forms so
-    representative rankings are reproducible across relabellings.
+  * The tool imports the live V4.0 engine and drawing helper (V4.5 at its
+    initial release; V5.4 now), uses the same backtrack-simplify mechanism for
+    generation, and scores canonical DT forms so representative rankings are
+    reproducible across relabellings.
   * With no arguments it opens a Tk configuration GUI; CLI mode supports
     resumable checkpoints, time-limited generation chunks, membership checks for
     pasted DT codes, optional exact VF2 verification, and generated reports.
