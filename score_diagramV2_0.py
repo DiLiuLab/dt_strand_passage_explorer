@@ -87,7 +87,7 @@ def _load_local(name, filename):
     return mod
 
 
-DDOL = _load_local("draw_dt_original_labelsV5_4", "draw_dt_original_labelsV5_4.py")
+DDOL = _load_local("draw_dt_original_labelsV5_5", "draw_dt_original_labelsV5_5.py")
 LE = _load_local("link_engine_v4_0", "link_engine_v4_0.py")
 
 try:

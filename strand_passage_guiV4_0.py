@@ -143,7 +143,7 @@ import numpy as np
 # backend so Sage/macOS never fails before the GUI's own backend fallback runs.
 os.environ.setdefault("MPLBACKEND", "Agg")
 
-import draw_dt_original_labelsV5_4 as D          # noqa: E402
+import draw_dt_original_labelsV5_5 as D          # noqa: E402
 import link_engine_v4_0 as E                       # noqa: E402
 
 TAB10_NAMES = ["blue", "orange", "green", "red", "purple",
@@ -2346,7 +2346,7 @@ def main():
                          "visit is the 'over' (default) or 'under' strand")
     ap.add_argument("--drawing-session", default=None, metavar="PATH",
                     help="load drawing settings from a JSON session saved by "
-                         "draw_dt_original_labelsV5_4.py")
+                         "draw_dt_original_labelsV5_5.py")
     ap.add_argument("--nongui", action="store_true",
                     help="write the two-pass strand-passage spreadsheet (.xlsx) "
                          "and overview SVG, then exit (needs SnapPy + pandas)")

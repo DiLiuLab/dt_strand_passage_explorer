@@ -95,10 +95,10 @@ import networkx as nx
 
 # Keep pyplot import from selecting a fragile GUI backend under Sage.
 os.environ.setdefault("MPLBACKEND", "Agg")
-import draw_dt_original_labelsV5_4 as D
+import draw_dt_original_labelsV5_5 as D
 
 VERSION = "4.0"
-DRAWING_MODULE_NAME = getattr(D, "__name__", "draw_dt_original_labelsV5_4")
+DRAWING_MODULE_NAME = getattr(D, "__name__", "draw_dt_original_labelsV5_5")
 
 # Defaults for the backtrack-assisted SnapPy simplification (ON by default in
 # the GUI and --nongui as of V3.3).
