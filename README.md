@@ -124,9 +124,9 @@ If the path does not end in `.xlsx`, the script adds it first. For example,
 directory and basename of the spreadsheet path.
 
 Custom displayed crossing IDs use the same syntax as
-`draw_dt_original_labelsV5_5.py`.  V4.0 adds a combined
-`--crossing-labels` option: assignment-style text is detected as a crossing map,
-while a plain list is detected as crossing order.
+`draw_dt_original_labelsV5_5.py`.  The combined
+`--crossing-labels` option detects assignment-style text as a crossing map,
+and a plain list as crossing order.
 
 ```bash
 sage -python strand_passage_guiV4_0.py \
@@ -151,7 +151,7 @@ the internal strand-passage calculation still uses the underlying DT crossing id
 
 Drawing settings:
 
-- V4.0 defaults strand-passage drawings to `shaped-tutte` with `tutte shape =
+- Strand-passage drawings default to `shaped-tutte` with `tutte shape =
   ellipse` and `tutte aspect = 1.0`.
 - In the GUI, click `Load drawing session` to load a JSON session saved by
   `draw_dt_original_labelsV5_5.py`. The saved 2-D drawing settings then apply to
@@ -170,88 +170,49 @@ sage -python draw_dt_original_labelsV5_5.py --dt "DT: [(4,6,2)]"
 sage -python audit_xyz.py link_sphere.xyz "DT: [(4,6,2)]"
 ```
 
-V5.4 audits each completed XYZ curve against the source DT link when Spherogram
+Each completed XYZ curve is audited against the source DT link when Spherogram
 and SnapPy are available. `Save XYZ`, `View XYZ`, and `Redraw 3D projection`
 show `[ok]`, `[FAIL]`, or an `[info]` dependency-skip result in the main status
-log; the two interactive 3D windows also retain a color-coded audit banner.
+log; the two interactive 3D windows also carry a color-coded audit banner.
 Dense Kamada layouts that fail should be rebuilt with `sphere layout =
 stereo-safe` (CLI: `--sphere-layout stereo-safe`). The `clearance (0=auto)` and
 `repair 3D strand clearance` GUI controls correspond to `--xyz-clearance` and
-`--no-xyz-repair`, and are saved in V5.4 session files.
+`--no-xyz-repair`.
 
-For `holed-tutte`, V5.4 adds `flatten orthogonal components`
-(`--flatten-orthogonal` / GUI checkbox, with `--flatten-outer-radius` and
-`--flatten-separation`). A ring that lies in a plane roughly perpendicular to the
-diagram (edge-on) collapses under the boundary-pinned harmonic solve onto a
-straight line through the centre and overlaps everything (for example, two of the
-rings in
-`DT: [(32,18,20,22,24,26,28,30),(34,52,36,54,40,50,42,58),(2,46,6,10,48,14),(4,56,12,60),(-38,8,16,-44)]`
-land on the vertical and horizontal axes). With the option on, each such
-component is redrawn as a **"D"**: a straight **diameter** through the centre
-carrying all its crossings, plus a perfect **semicircle** (half a circle) joining
-the diameter's two ends. The two flat rings share two crossings — the one where the
-diameters cross stays at the **centre**, and the other (the only crossing between a
-ring's two extreme crossings, the "out" crossing) is where the two D's meet. The
-two D's are **concentric**: the **horizontal** ring is the outer D (diameter along
-x, semicircle of radius `R_out` over the top) and the **vertical** ring the inner D
-(diameter along y, semicircle of radius `R_in` bulging left), with the inner
-semicircle's leftmost point (the out crossing) landing on the outer diameter. Each
-crossing keeps its own signed position along the axis (already roughly symmetric),
-so both diameters come out symmetric about the centre; because a diameter meets its
-semicircle at a right angle, the junctions are genuine corners, drawn as exact
-line + circle geometry (a per-component render override, so the arcs are true
-semicircles rather than splines). `--flatten-outer-radius` (default 1.1, in ring
-diameters) is the outer D's radius; `--flatten-separation` (default 0.25) the
-radial gap between the two D's (`R_in = R_out − separation`). Only the
-flat components move; the round rings and every true crossing position are
-preserved. It composes with the other holed-tutte controls (hole ratio / swap /
-invert-ring / ring-tilt / ring-equalize / min-separation). It is tuned for
-axis-aligned orthogonal pairs (the Edwards-Venn example renders with no flagged
-artifacts); for fully clean overlapping ovals the `sphere-stereo` layout remains
-the alternative route.
+Extra `holed-tutte` controls:
 
-`holed-tutte` also gains a `wrap axis (PCA)` selector (`--wrap-axis
-{primary,secondary,tertiary}` / GUI dropdown, default `primary`). The layout wraps
-the diagram around a closed principal curved axis built from a 3D-torus layout of
-the crossing graph, projected onto a plane of two of its three principal axes
-(widest **W**, middle **M**, thinnest **T**). `primary` uses the (W, M) donut
-plane (the usual wreath); `secondary` uses (W, T), wrapping around the curve
-perpendicular to primary (the hole/torus axis swapped in for the middle axis);
-`tertiary` uses (M, T), the plane perpendicular to the widest axis — the curved
-axis orthogonal to both. The alternate axes give genuinely different views for
-links whose two ring systems lie in near-orthogonal planes. (`--secondary-axis`
-remains as a deprecated alias for `--wrap-axis secondary`.)
+- `flatten orthogonal components` (`--flatten-orthogonal` / GUI checkbox)
+  redraws rings that lie edge-on to the diagram — which otherwise collapse onto
+  a line through the centre — as concentric "D" shapes so their crossings stay
+  readable. Reach for it on links with axis-aligned orthogonal ring pairs (e.g.
+  the Edwards-Venn examples). Tune with `--flatten-outer-radius` (default 1.1)
+  and `--flatten-separation` (default 0.25).
+- `wrap axis (PCA)` selector (`--wrap-axis {primary,secondary,tertiary}` / GUI
+  dropdown, default `primary`) chooses which pair of principal axes the diagram
+  wraps around. The alternate axes give genuinely different views for links
+  whose ring systems lie in near-orthogonal planes.
+- **rotational-symmetry enforcement** (`--enforce-symmetry` /
+  `--no-enforce-symmetry` / GUI checkbox, default on) snaps a link with a cyclic
+  symmetry onto exact `k`-fold rotational symmetry. It is a no-op for links with
+  no detected symmetry.
 
-V5.4 also adds **rotational-symmetry enforcement** (`--enforce-symmetry` /
-`--no-enforce-symmetry` / GUI checkbox, default on). When a DT has a cyclic
-symmetry — each component is the next one shifted by `2n/k` positions, so a `2π/k`
-turn maps the whole link to itself — the drawing is snapped onto exact `k`-fold
-rotational symmetry: ring-equalize is disabled (it redistributes the crossings and
-breaks the symmetric arrangement), and the near-symmetric layout is orbit-averaged
-so the `k` rotated copies coincide exactly. It is a no-op for links with no
-detected symmetry, or when the chosen wrap axis does not already put the layout
-close to that rotation — the **tertiary** wrap axis often reveals a symmetry the
-primary/secondary do not.
+See [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md) for the geometry rationale behind
+these controls.
 
 The standalone helper computes live 2-D preview state on a background worker,
-so switching among the parameter tabs remains responsive. With `fixed grid
+so switching among the parameter tabs stays responsive. With `fixed grid
 while rotating` enabled, `Redraw 3D projection` preserves the currently locked
 grid basis. `Save projection(s)` proposes a clean basename without `.xyz`.
 
-V5.5 reworks the standalone helper's live 3-D projection window. Left-drag is now
-a free **trackball**: the object follows the cursor, with a horizontal drag
-spinning it about the screen's vertical axis, a vertical drag about the screen's
-horizontal axis, and a right-drag (or Shift+left-drag) rolling it about the axis
-perpendicular to the screen — there is no elevation pole to stall against. Live
-dragging is also much faster (the framework overlay is stroked as flat single
-lines while dragging and restored to the full depth-shaded halo on release, and
-the view is framed to the object's bounding sphere so an orbit only rotates the
-curve). New over/under gap and hide controls (GUI `3D view` tab + CLI, applied
-live and to saved projections): `crossing gap factor` (`--proj-gap-factor`,
-default 2.8) scales the white gap where a nearer strand crosses over a farther
-one, `over/under crossing gaps` (`--proj-no-gaps`) toggles the gaps off so strands
-overlap solid, and `hide components` (`--proj-hide-components`, a 1-based list
-like `1,3`) hides individual rings to isolate one ring system in a dense link.
+The live 3-D projection window uses a free **trackball**: left-drag tumbles the
+object about the screen axes (right-drag or Shift+left-drag rolls it), with no
+elevation pole to stall against. Over/under gap and hide controls (GUI `3D view`
+tab + CLI, applied live and to saved projections): `crossing gap factor`
+(`--proj-gap-factor`, default 2.8) scales the white gap where a nearer strand
+crosses over a farther one, `over/under crossing gaps` (`--proj-no-gaps`) toggles
+the gaps off so strands overlap solid, and `hide components`
+(`--proj-hide-components`, a 1-based list like `1,3`) hides individual rings to
+isolate one ring system in a dense link.
 
 Spreadsheet columns to know:
 
@@ -400,19 +361,13 @@ sage -python ./strand_passage_guiV4_0.py
   `link_diagram.*`, `chain*.jsonl`, `diagram_scores*`, `canonical_cache.json`,
   `results/`, and cascade PNGs are ignored by Git.
 - The `--nongui` overview SVG keeps labels and captions as editable text using
-  Arial, so text can be selected and edited in Illustrator/Inkscape. V3.8 also
-  enlarges the surrounding label boxes/circles so the exported SVG better
-  matches the live Matplotlib view in Illustrator.
+  Arial, so text can be selected and edited in Illustrator/Inkscape, with label
+  boxes/circles sized to match the live Matplotlib view.
 - Standalone SVGs from `draw_dt_original_labelsV5_5.py` use the same Arial
-  editable-text policy and roomier DT-label/crossing-ID boxes. V3.13 fixed
-  over/under gaps at self-crossings such as the trefoil `DT: [(4,6,2)]`; V3.14
-  keeps requested layouts even when they create false crossings, highlights
-  those artifacts, and adds a visible metadata caption to saved diagrams. V4.5
-  keeps the standalone helper GUI manageable by splitting parameters into
-  separate 2-D diagram and 3-D XYZ tabs.
-- V5.4 adds topology-audited XYZ generation, clearance repair for Kamada
-  layouts, and the correct-by-construction `stereo-safe` layout. Audit results
-  are visible in the status log and both interactive 3D windows.
+  editable-text policy and roomier DT-label/crossing-ID boxes. Requested layouts
+  are kept even when they create false crossings, with those artifacts
+  highlighted and a metadata caption added to saved diagrams. The standalone
+  helper GUI splits parameters into separate 2-D diagram and 3-D XYZ tabs.
 - In the drawing helper GUI, saved SVG font sizes follow the live GUI fields:
   `DT label font` maps to `--font-size`, and `crossing ID font` maps to
   `--crossing-id-font-size`.
