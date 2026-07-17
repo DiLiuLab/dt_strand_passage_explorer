@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-score_diagramV2_0.py  --  Comprehensive diagram explorer for a single link.
+score_diagramV2_1.py  --  Comprehensive diagram explorer for a single link.
 
 Pipeline
 --------
@@ -18,7 +18,7 @@ Pipeline
    signed-diagram isomorphism test (Weisfeiler-Lehman hash for bucketing +
    VF2 for confirmation) that preserves the over/under (chirality) pattern.
 
-3. SCORE.  Each representative is scored with the self-contained V2 metric
+3. SCORE.  Each representative is scored with the score_diagram.py metric
    engine (combinatorial balance, planar-graph symmetry, 2-D Tutte energy,
    3-D sphere energy) and ranked by the composite quality.
 
@@ -31,17 +31,16 @@ Reproducibility: round i is driven by a deterministic per-round seed
 is resumable from a JSONL checkpoint.
 
 Requires SnapPy (``import snappy``); run under ``sage -python`` on the research
-machine for the full toolchain.  The metric engine is self-contained and imports
-the live ``link_engine_v4_0.py`` and ``draw_dt_original_labelsV5_4.py`` modules
-from this folder.
+machine for the full toolchain.  Depends on score_diagram.py, link_engine_v4_0.py
+and draw_dt_original_labelsV4_5.py sitting next to it.
 
 Usage
 -----
-    sage -python score_diagramV2_0.py                         # open GUI
-    sage -python score_diagramV2_0.py --help                  # CLI help
-    sage -python score_diagramV2_0.py --dt "DT: [...]" --rounds 99 --xlsx out.xlsx --svg out.svg
+    python3 score_diagramV2_1.py                              # defaults: example DT, 99 rounds
+    python3 score_diagramV2_1.py --dt "DT: [...]" --rounds 99
+    python3 score_diagramV2_1.py --xlsx out.xlsx --svg out.svg --json out.json
     # long runs can be chunked under a shell time limit:
-    sage -python score_diagramV2_0.py --generate-only --max-seconds 40   # repeat until done
+    python3 score_diagramV2_1.py --generate-only --max-seconds 40   # repeat until done
 """
 
 import argparse
@@ -63,11 +62,13 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 import networkx as nx
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-SCORE_ICON_PNG = os.path.join(_HERE, "assets", "score_diagram_icon.png")
 
 
 def _find_base(filename):
-    for base in (_HERE, os.getcwd(), os.environ.get("DDOL_DIR", "")):
+    # old_scripts/ is searched as a fallback so archived-but-still-imported helpers
+    # (e.g. canonical_dt.py V1, now retired there) keep resolving.
+    for base in (_HERE, os.path.join(_HERE, "old_scripts"), os.getcwd(),
+                 os.environ.get("DDOL_DIR", "")):
         if base and os.path.exists(os.path.join(base, filename)):
             return base
     return None
@@ -77,7 +78,7 @@ def _load_local(name, filename):
     """Import a sibling module by path, registered in sys.modules (dataclasses need it)."""
     base = _find_base(filename)
     if base is None:
-        raise FileNotFoundError("Could not find %s next to score_diagramV2_0.py." % filename)
+        raise FileNotFoundError("Could not find %s next to score_diagramV2_1.py." % filename)
     if base not in sys.path:
         sys.path.insert(0, base)          # let intra-package `import ...` statements resolve
     spec = importlib.util.spec_from_file_location(name, os.path.join(base, filename))
@@ -87,8 +88,32 @@ def _load_local(name, filename):
     return mod
 
 
-DDOL = _load_local("draw_dt_original_labelsV5_5", "draw_dt_original_labelsV5_5.py")
+def _find_draw_module():
+    """Locate the current draw_dt_original_labels*.py, auto-adapting across version bumps
+    (e.g. V4_5 -> V5_5). Picks the highest-versioned file at the top level."""
+    import glob
+    for base in (_HERE, os.getcwd(), os.environ.get("DDOL_DIR", "")):
+        if not base:
+            continue
+        matches = sorted(glob.glob(os.path.join(base, "draw_dt_original_labels*.py")))
+        if matches:
+            path = matches[-1]                      # highest version, e.g. V5_5 > V4_5
+            if base not in sys.path:
+                sys.path.insert(0, base)
+            return os.path.splitext(os.path.basename(path))[0], path
+    raise FileNotFoundError(
+        "Could not find draw_dt_original_labels*.py next to score_diagramV2_1.py.")
+
+
+# Load the drawing helper under its real module name so link_engine's
+# `import draw_dt_original_labelsV5_5 as D` reuses the same instance.
+_draw_name, _draw_path = _find_draw_module()
+_spec = importlib.util.spec_from_file_location(_draw_name, _draw_path)
+DDOL = importlib.util.module_from_spec(_spec)
+sys.modules[_draw_name] = DDOL
+_spec.loader.exec_module(DDOL)
 LE = _load_local("link_engine_v4_0", "link_engine_v4_0.py")
+CDT2 = _load_local("canonical_dt_V2_0", "canonical_dt_V2_0.py")  # canonical form, combinatorial symmetry, and the rotation-system + eigenvalue point-group engine (sigma/i/Sn)
 
 try:
     from scipy.optimize import linear_sum_assignment
@@ -470,28 +495,37 @@ def sphere_3d_metrics(model, G):
 # Edit WEIGHTS to explore which properties should dominate the composite score.
 WEIGHTS = {
     "strand_balance": 1.0,     # equal strand lengths across components
-    "diagram_symmetry": 1.0,   # combinatorial + geometric symmetry
-    "geometric_strain": 1.0,   # uniform arcs, ~90 deg crossings, regular faces
+    "diagram_symmetry": 1.0,   # combinatorial (sign-aware) + 3-D geometric symmetry
+    "face_regularity": 1.0,    # regular planar faces + few bigons (embedding property)
     "sphere_energy": 1.0,      # evenly spread crossings + low bending in 3-D
 }
 
 
 def _quality_scores(m):
-    c, g, q2, q3 = m["combinatorial"], m["graph"], m["geom2d"], m["sphere3d"]
+    # The 2-D Tutte/geom2d numbers (edge-length CV, Dirichlet energy, crossing-angle
+    # deviation, 2-D positional symmetry) depend on which face draw_dt turns to the
+    # OUTSIDE (the 'puncture').  When several faces tie for the largest boundary that
+    # choice is not intrinsic to the diagram, so those metrics are NOT scored -- they
+    # are kept only as descriptive columns.  Every quality below is computed from
+    # puncture-independent data: strand lengths, the sign-aware automorphism group,
+    # the planar-embedding face spectrum, and the 3-D sphere layout.
+    c, g, q3 = m["combinatorial"], m["graph"], m["sphere3d"]
     strand_balance = 0.5 * c["strand_balance_entropy"] + 0.5 * (1.0 / (1.0 + c["strand_length_cv"]))
     aut = g["automorphism_order"]
     sym_comb = 1.0 - 1.0 / max(1, aut)
-    diagram_symmetry = np.mean([sym_comb, q2["sym2d_score"], q3["sym3d_score"]])
-    geometric_strain = np.mean([
-        1.0 / (1.0 + q2["edge_length_cv"]),
-        1.0 - min(1.0, q2["crossing_angle_rms_dev_deg"] / 90.0),
+    diagram_symmetry = np.mean([sym_comb, q3["sym3d_score"]])
+    # 'face regularity' replaces the old puncture-dependent 'geometric strain':
+    # face-degree CV and the bigon count are properties of the planar embedding
+    # (the combinatorial map), independent of the outer-face choice.
+    face_regularity = np.mean([
         1.0 / (1.0 + g["face_degree_cv"]),
+        1.0 / (1.0 + g["n_bigons"]),
     ])
     sphere_energy = np.mean([q3["sphere_spread_quality"], 1.0 / (1.0 + q3["strand3d_length_cv"])])
     return {
         "strand_balance": float(strand_balance),
         "diagram_symmetry": float(diagram_symmetry),
-        "geometric_strain": float(geometric_strain),
+        "face_regularity": float(face_regularity),
         "sphere_energy": float(sphere_energy),
     }
 
@@ -507,9 +541,10 @@ def score_diagram(dt_string, negative_even="over"):
         "geom2d": geometric_2d_metrics(model, G),
         "sphere3d": sphere_3d_metrics(model, G),
     }
-    # robust, reproducible symmetry order (count of DT relabellings fixing the canonical
-    # code); replaces the fragile VF2 automorphism enumeration.
+    # robust, reproducible symmetry order + group (respecting over/under), from the
+    # canonical DT relabellings; replaces the fragile VF2 automorphism enumeration.
     m["graph"]["automorphism_order"] = canonical_symmetry(dt_string)
+    m["graph"]["symmetry_group"] = canonical_group(dt_string)
     m["quality"] = _quality_scores(m)
     m["composite"] = float(sum(WEIGHTS[k] * m["quality"][k] for k in WEIGHTS) / sum(WEIGHTS.values()))
     return m
@@ -572,6 +607,12 @@ def generate_chain(dt0, rounds, backtrack_rounds, backtrack_steps, base_seed,
     trapped cycling among a few common minimal diagrams and re-seeds exploration
     from the canonical starting point."""
     chain = _read_checkpoint(checkpoint)
+    if chain and verbose:
+        print("  using EXISTING checkpoint '%s': %d round(s) already present (%d DT codes); "
+              "generation resumes from there%s."
+              % (checkpoint, len(chain) - 1, len(chain),
+                 "" if (len(chain) - 1) < rounds else " (already at/beyond the requested rounds — "
+                 "no new generation)"), flush=True)
     if not chain:
         chain = [dt0]
         _append_checkpoint(checkpoint, 0, dt0)
@@ -770,15 +811,54 @@ def dedup(chain):
             "sig": sig,
         })
     classes.sort(key=lambda c: c["rep_round"])
+
+    # UP-TO-MIRROR MERGE: collapse classes that are mirror images of each other.
+    # The whole V2_0 framework (canonical form + symmetry) works up to mirror, so the
+    # diagram COUNT should too.  The two Offset clasps are mirror images, so this takes
+    # the set from 5 to 4 (Offset a/b become one entry, an enantiomeric pair).  Keyed by
+    # the up-to-mirror canonical DT; the earliest-seen class leads each merged group and
+    # carries that canonical as its representative (so scores/names are deterministic).
+    by_mirror = {}
+    for c in classes:
+        mk = _mirror_canonical(c["rep_dt"])
+        by_mirror.setdefault(mk, []).append(c)
+    merged = []
+    for mk, cs in by_mirror.items():
+        cs.sort(key=lambda c: c["rep_round"])
+        base = cs[0]
+        for other in cs[1:]:
+            base["strings"] = base["strings"] + other["strings"]
+            base["members"] = sorted(set(base["members"]) | set(other["members"]))
+        base["multiplicity"] = len(base["members"])
+        base["rep_round"] = min(base["members"])
+        base["n_distinct_strings"] = len(base["strings"])
+        base["mirror_canonical"] = mk
+        base["mirror_merged"] = len(cs) > 1
+        merged.append(base)
+    merged.sort(key=lambda c: c["rep_round"])
+    classes = merged
     for j, c in enumerate(classes, start=1):
         c["rep_id"] = j
     return classes
 
 
+def _mirror_dt(dt):
+    """The mirror-image DT code: negate every (even) entry, i.e. switch every crossing's
+    over/under.  Used so verification matches the UP-TO-MIRROR de-duplication."""
+    comps = CDT2.parse_dt(dt)
+    return CDT2.fmt_dt(tuple(tuple(-x for x in c) for c in comps))
+
+
 def verify_classes(classes, sample=25):
     """Confidence check: within each class, run exact labelled-graph VF2 between the
     representative and up to `sample` other distinct DT strings (0 = all).  Returns a
-    per-class report; a False means the fast signature merged non-isomorphic diagrams."""
+    per-class report; a False means the fast signature merged non-isomorphic diagrams.
+
+    Because de-duplication now works UP TO MIRROR (a diagram and its mirror image share
+    a class -- e.g. the two Offset clasps), a member counts as consistent if it is VF2-
+    isomorphic to the representative EITHER directly OR after mirroring (negating the DT).
+    Without this, VF2 -- which is over/under-preserving and does NOT see mirror images as
+    isomorphic -- falsely reports a MERGE ERROR on any mirror-merged class."""
     import random as _r
     nm = nx.algorithms.isomorphism.categorical_node_match("lab", "")
     report = []
@@ -787,7 +867,16 @@ def verify_classes(classes, sample=25):
         if sample and len(others) > sample:
             others = _r.Random(0).sample(others, sample)
         Grep, _ = _iso_graph(c["rep_dt"])
-        ok = all(nx.is_isomorphic(Grep, _iso_graph(o)[0], node_match=nm) for o in others)
+
+        def _iso_upto_mirror(o):
+            if nx.is_isomorphic(Grep, _iso_graph(o)[0], node_match=nm):
+                return True
+            try:                                   # allow the mirror image (up-to-mirror dedup)
+                return nx.is_isomorphic(Grep, _iso_graph(_mirror_dt(o))[0], node_match=nm)
+            except Exception:  # noqa: BLE001
+                return False
+
+        ok = all(_iso_upto_mirror(o) for o in others)
         report.append({"rep_id": c["rep_id"], "checked": len(others), "all_isomorphic": ok})
     return report
 
@@ -852,15 +941,16 @@ def _canonical_entry(dt, allow_flip=False):
                     _CANON_CACHE = json.load(fh)
             except Exception:
                 _CANON_CACHE = {}
-    key = ("F:" if allow_flip else "N:") + dt
+    key = "N:" + dt
     entry = _CANON_CACHE.get(key)
-    if isinstance(entry, dict) and "dt" in entry and "sym" in entry:
+    if isinstance(entry, dict) and all(k in entry for k in ("dt", "sym", "group")):
         return entry
-    t, n_min = canonical_dt(dt, allow_flip=allow_flip, return_symmetry=True)
-    s = "DT: [" + ", ".join("(" + ", ".join(str(x) for x in comp) + ")" for comp in t) + "]"
-    entry = {"dt": s, "sym": int(n_min)}
+    # canonical form + symmetry order + symmetry GROUP, via the shared canonical_dt module
+    res = CDT2.analyze(dt)
+    entry = {"dt": res["canonical"], "sym": int(res["symmetry_order"]),
+             "group": _short_group(res.get("element_orders") or [1] * res["symmetry_order"])}
     _CANON_CACHE[key] = entry
-    _CANON_CACHE[("F:" if allow_flip else "N:") + s] = entry   # canonical maps to itself
+    _CANON_CACHE["N:" + entry["dt"]] = entry            # canonical maps to itself
     try:
         with open(_CANON_CACHE_PATH, "w") as fh:
             json.dump(_CANON_CACHE, fh)
@@ -869,12 +959,52 @@ def _canonical_entry(dt, allow_flip=False):
     return entry
 
 
+def _short_group(orders):
+    """Compact symmetry-group name from the multiset of element orders."""
+    n = len(orders)
+    if n <= 1:
+        return "C1"
+    if max(orders) == n:
+        return "C%d" % n                                # cyclic (has an order-n element)
+    if n == 4 and sorted(orders) == [1, 2, 2, 2]:
+        return "C2xC2"                                  # Klein four-group
+    if n == 6 and sorted(orders) == [1, 2, 2, 2, 3, 3]:
+        return "D3"                                     # dihedral of order 6
+    return "order-%d" % n
+
+
 def canonical_dt_string(dt, allow_flip=False):
-    return _canonical_entry(dt, allow_flip)["dt"]
+    if allow_flip:
+        return _mirror_canonical(dt)
+    return _canonical_entry(dt)["dt"]
+
+
+_MIRROR_CANON_CACHE = {}
+
+
+def _mirror_canonical(dt):
+    """UP-TO-MIRROR canonical DT string (V2_0, allow_flip=True): a diagram and its
+    mirror image collapse to one code.  Used to merge mirror-image classes (the two
+    Offset clasps are mirror images, so up to mirror there are 4 diagrams, not 5)."""
+    key = "".join(str(dt).split())
+    if key in _MIRROR_CANON_CACHE:
+        return _MIRROR_CANON_CACHE[key]
+    try:
+        comps = [tuple(c) for c in CDT2.parse_dt(dt)]
+        canon, _, _ = CDT2.canonicalize(comps, allow_flip=True)
+        s = CDT2.fmt_dt(canon)
+    except Exception:  # noqa: BLE001
+        s = _canonical_entry(dt)["dt"]
+    _MIRROR_CANON_CACHE[key] = s
+    return s
 
 
 def canonical_symmetry(dt, allow_flip=False):
-    return _canonical_entry(dt, allow_flip)["sym"]
+    return _canonical_entry(dt)["sym"]
+
+
+def canonical_group(dt):
+    return _canonical_entry(dt)["group"]
 
 
 def score_representatives(classes):
@@ -884,9 +1014,9 @@ def score_representatives(classes):
     otherwise make the composite score wobble between runs)."""
     scored = []
     for c in classes:
-        cdt = canonical_dt_string(c["rep_dt"])
+        cdt = c.get("mirror_canonical") or _mirror_canonical(c["rep_dt"])  # up-to-mirror canonical
         c["canonical_dt"] = cdt
-        m = score_diagram(cdt)            # m["dt"] == canonical form
+        m = score_diagram(cdt)            # m["dt"] == up-to-mirror canonical form
         m["_class"] = c
         m["jones"] = _jones(cdt)
         m["linking_fp"] = _linking_fp(cdt)
@@ -895,6 +1025,40 @@ def score_representatives(classes):
     for rank, m in enumerate(scored, start=1):
         m["rank"] = rank
     return scored
+
+
+# --------------------------------------------------------------------------- #
+#  Descriptive names for the five distinct diagrams of the target link
+# --------------------------------------------------------------------------- #
+# Structural finding (see the comparative report): four of the five diagrams
+# contain a Bing-double "clasp" of two components -- a pair that is geometrically
+# clasped yet has linking number 0.  In every diagram two "frame" components carry
+# 3 crossings each, and the remaining two components split 8 crossings between
+# them; the split fixes the clasp's balance (4-4, 5-3, or 6-2).  The fifth diagram
+# spreads the same 8 crossings symmetrically ("orthogonally") with no localized
+# clasp, which is why it alone reaches C2xC2 symmetry.  Names are keyed to the
+# canonical DT code (whitespace-insensitive) so they are stable across runs and
+# independent of the tie-order of the two 5-3 variants.
+_DIAGRAM_NAMES = {
+    "DT:[(-28,-26,-24,-22),(-20,-8,-4),(-6,12,-2),(-10,-16,-14,-18)]":
+        ("Orthogonal rosette", "clasp-free; 8 crossings spread symmetrically (4-4); 3D point group C2v"),
+    "DT:[(-28,-22,10,18),(-8,24,-20),(12,6,-26,-2),(4,16,-14)]":
+        ("Balanced clasp", "Bing-double clasp, balanced 4-4 split; 3D point group Ci (inversion centre)"),
+    # The two 5-3 Offset clasps are mirror images of each other, so up to mirror they
+    # are ONE diagram (an enantiomeric pair).  Both codes map to the same name; the
+    # merged class is represented by the up-to-mirror canonical (the second code).
+    "DT:[(-28,-26,8),(14,22,-2),(-24,-20,-12),(-16,6,4,-18,-10)]":
+        ("Offset clasp", "Bing-double clasp, offset 5-3 split (mirror-image pair a/b); 3D point group Cs (mirror plane)"),
+    "DT:[(-28,-26,-22,12,-20),(-2,24,-18),(-4,-10,14),(8,6,-16)]":
+        ("Offset clasp", "Bing-double clasp, offset 5-3 split (mirror-image pair a/b); 3D point group Cs (mirror plane)"),
+    "DT:[(-28,-26,-22,14,16,20),(-4,24,-2),(-6,12),(10,8,-18)]":
+        ("Lopsided clasp", "Bing-double clasp, lopsided 6-2 split; 3D point group C1"),
+}
+
+
+def _diagram_name(dt):
+    """Return (name, clasp-structure) for a canonical DT, or ('','') if unknown."""
+    return _DIAGRAM_NAMES.get("".join(str(dt).split()), ("", ""))
 
 
 # --------------------------------------------------------------------------- #
@@ -912,7 +1076,9 @@ def _cols():
     return [
         ("Rank", lambda m: m["rank"]),
         ("Rep ID", lambda m: m["_class"]["rep_id"]),
-        ("DT code", lambda m: m["dt"]),
+        ("Diagram name", lambda m: _diagram_name(m["dt"])[0]),
+        ("Clasp structure", lambda m: _diagram_name(m["dt"])[1]),
+        ("Canonical DT code", lambda m: m["dt"]),
         ("Multiplicity", lambda m: m["_class"]["multiplicity"]),
         ("First round", lambda m: m["_class"]["rep_round"]),
         ("Crossings", g("combinatorial", "n_crossings")),
@@ -930,6 +1096,7 @@ def _cols():
         ("Face degree CV", g("graph", "face_degree_cv")),
         ("Bigons", g("graph", "n_bigons")),
         ("Symmetry order", g("graph", "automorphism_order")),
+        ("Symmetry group", lambda m: m["graph"].get("symmetry_group", "")),
         ("Edge length CV", g("geom2d", "edge_length_cv")),
         ("Dirichlet energy", g("geom2d", "dirichlet_energy_norm")),
         ("Crossing angle dev (deg)", g("geom2d", "crossing_angle_rms_dev_deg")),
@@ -938,15 +1105,27 @@ def _cols():
         ("Sphere spread quality", g("sphere3d", "sphere_spread_quality")),
         ("3D strand length CV", g("sphere3d", "strand3d_length_cv")),
         ("Bending energy", g("sphere3d", "bending_energy")),
-        ("3D symmetry order", g("sphere3d", "sym3d_order")),
+        ("3D dot-pattern symmetry", g("sphere3d", "sym3d_order")),
+        ("3D point group", lambda m: _point_group_3d(m["dt"])),
         ("q: strand balance", g("quality", "strand_balance")),
         ("q: diagram symmetry", g("quality", "diagram_symmetry")),
-        ("q: geometric strain", g("quality", "geometric_strain")),
+        ("q: face regularity", g("quality", "face_regularity")),
         ("q: sphere energy", g("quality", "sphere_energy")),
         ("COMPOSITE", lambda m: m["composite"]),
         ("Linking numbers (sorted)", lambda m: str(m.get("linking_fp"))),
         ("Jones (Sage only)", lambda m: m["jones"]),
     ]
+
+
+# Columns kept for reference but NOT part of the composite score: the 2-D
+# Tutte/geom2d numbers depend on which face draw_dt turns to the outside (the
+# 'puncture'), so they are descriptive only and shown on a grey background.
+_DESCRIPTIVE_COLS = {
+    "Edge length CV",
+    "Dirichlet energy",
+    "Crossing angle dev (deg)",
+    "2D symmetry score",
+}
 
 
 def write_excel(scored, path, run_info):
@@ -960,6 +1139,8 @@ def write_excel(scored, path, run_info):
     ws.title = "representatives"
 
     head_fill = PatternFill("solid", fgColor="1F3864")
+    desc_head_fill = PatternFill("solid", fgColor="808080")   # descriptive-only header
+    desc_fill = PatternFill("solid", fgColor="EDEDED")         # descriptive-only cell
     head_font = Font(name="Arial", bold=True, color="FFFFFF", size=10)
     best_fill = PatternFill("solid", fgColor="C6EFCE")
     cell_font = Font(name="Arial", size=10)
@@ -968,14 +1149,14 @@ def write_excel(scored, path, run_info):
 
     for cidx, (header, _) in enumerate(cols, start=1):
         cell = ws.cell(row=1, column=cidx, value=header)
-        cell.fill = head_fill
+        cell.fill = desc_head_fill if header in _DESCRIPTIVE_COLS else head_fill
         cell.font = head_font
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         cell.border = border
 
     for ridx, m in enumerate(scored, start=2):
         best = (m["rank"] == 1)
-        for cidx, (_, getter) in enumerate(cols, start=1):
+        for cidx, (header, getter) in enumerate(cols, start=1):
             val = getter(m)
             if isinstance(val, float):
                 val = round(val, 4)
@@ -983,7 +1164,11 @@ def write_excel(scored, path, run_info):
             cell.font = cell_font
             cell.border = border
             cell.alignment = Alignment(horizontal="center", vertical="center")
-            if best:
+            # Descriptive 2-D columns stay grey even on the best row: they are not
+            # part of the composite (puncture-dependent, see _DESCRIPTIVE_COLS).
+            if header in _DESCRIPTIVE_COLS:
+                cell.fill = desc_fill
+            elif best:
                 cell.fill = best_fill
 
     # widths
@@ -1038,6 +1223,8 @@ def write_excel(scored, path, run_info):
 # For each Excel metric column: is larger better, smaller better, or just descriptive?
 _METRIC_LEGEND = [
     ("Rank", "lower = better", "1 = best blueprint overall."),
+    ("Diagram name", "descriptive", "Structural name of the diagram: 'Orthogonal rosette' (clasp-free, C2xC2) or one of the Bing-double clasps (Balanced 4-4, Offset 5-3 a/b, Lopsided 6-2)."),
+    ("Clasp structure", "descriptive", "The Bing-double reading: two frame components carry 3 crossings each; the two clasp components split 8 crossings; the split (4-4 / 5-3 / 6-2) sets the clasp balance. The orthogonal form has no localized clasp."),
     ("Multiplicity", "descriptive", "How often the simplifier produced this diagram; NOT a quality (the best diagram is actually rare)."),
     ("First round", "descriptive", "Round at which the diagram was first seen."),
     ("Crossings", "lower = better", "Diagram complexity; fixed at 14 here (all are minimal)."),
@@ -1053,19 +1240,21 @@ _METRIC_LEGEND = [
     ("Faces (n+2)", "fixed", "Number of regions; equals crossings + 2 (Euler check) = 16."),
     ("Face degree CV", "lower = better", "Regularity of the regions; lower = more uniform tiling."),
     ("Bigons", "lower = better", "Two-sided regions (clasps); 0 = no local crowding."),
-    ("Symmetry order", "higher = better", "How many ways the diagram maps onto itself; higher = fewer unique sequences."),
-    ("Edge length CV", "lower = better", "Uniformity of segment lengths in the relaxed 2-D layout."),
-    ("Dirichlet energy", "lower = better", "2-D spring energy; 1 = perfectly uniform springs."),
-    ("Crossing angle dev (deg)", "lower = better", "Deviation of crossings from ideal 90-degree X shapes."),
-    ("2D symmetry score", "higher = better", "Rotational symmetry of the laid-out crossings (0-1)."),
+    ("Symmetry order", "higher = better", "Combinatorial symmetry: how many DT re-encodings fix the diagram (RESPECTS over/under); higher = fewer unique sequences."),
+    ("Symmetry group", "descriptive", "The symmetry group type respecting over/under (e.g. C1 trivial, C2, C2xC2 = Klein four-group of order 4, Ck cyclic). C2xC2 has order 4 but is NOT a 4-fold rotation."),
+    ("Edge length CV", "descriptive", "DESCRIPTIVE ONLY (not scored): uniformity of segment lengths in the relaxed 2-D layout. Depends on which face draw_dt turns to the outside (the 'puncture'), which is not intrinsic when faces tie for largest -- so it is excluded from the composite."),
+    ("Dirichlet energy", "descriptive", "DESCRIPTIVE ONLY (not scored): 2-D spring energy. Puncture-dependent (see Edge length CV), so excluded from the composite."),
+    ("Crossing angle dev (deg)", "descriptive", "DESCRIPTIVE ONLY (not scored): deviation of crossings from ideal 90-degree X shapes in the 2-D layout. Puncture-dependent, so excluded from the composite."),
+    ("2D symmetry score", "descriptive", "DESCRIPTIVE ONLY (not scored): rotational symmetry of the crossing POSITIONS in the 2-D layout; IGNORES over/under AND depends on the puncture, so excluded from the composite. Use 'Symmetry order' (sign-aware) and '3D point group' instead."),
     ("Thomson energy", "lower = better", "Crowding of crossings on the sphere; lower = more evenly spread."),
     ("Sphere spread quality", "higher = better", "Evenness of the spread on the sphere vs ideal; 1 = ideal."),
     ("3D strand length CV", "lower = better", "Evenness of strand lengths measured on the 3-D sphere."),
     ("Bending energy", "lower = better", "How sharply strands turn in 3-D; lower = gentler, relaxed curves."),
-    ("3D symmetry order", "higher = better", "Rotational symmetry axis of the 3-D layout (C-k)."),
+    ("3D dot-pattern symmetry", "higher = better", "Largest rotational symmetry of the crossing POSITIONS only in the 3-D layout (a k-fold dot pattern); IGNORES over/under and crossing signs -- NOT a signed-diagram symmetry, so it can overstate the true symmetry. Use 'Symmetry order'/'Symmetry group' for the sign-respecting value."),
+    ("3D point group", "descriptive", "True Schoenflies point group of the 3-D spherical embedding (up to mirror): rotation axes (Cn) classified vs improper operations sub-typed by eigenvalues -- mirror plane (Cs), inversion centre (Ci), rotoreflection (Sn) -- with a full-loop reliability gate. E.g. Orthogonal rosette C2v, Balanced clasp Ci (inversion centre; NOT Cs), Offset clasp Cs, Lopsided clasp C1."),
     ("q: strand balance", "higher = better", "0-1 quality for even strands."),
-    ("q: diagram symmetry", "higher = better", "0-1 quality for symmetry."),
-    ("q: geometric strain", "higher = better", "0-1 quality for low 2-D strain."),
+    ("q: diagram symmetry", "higher = better", "0-1 quality for symmetry (sign-aware automorphism + 3-D dot pattern; the puncture-dependent 2-D symmetry is no longer included)."),
+    ("q: face regularity", "higher = better", "0-1 quality for a regular planar tiling: low face-degree CV and few bigons. Computed from the planar embedding (independent of the puncture); replaces the former 2-D 'geometric strain'."),
     ("q: sphere energy", "higher = better", "0-1 quality for even, relaxed 3-D layout."),
     ("COMPOSITE", "higher = better", "Overall 0-1 score; higher = better synthesis blueprint."),
     ("Linking numbers (sorted)", "descriptive", "Pairwise linking fingerprint (same for all: the link is fixed)."),
@@ -1136,7 +1325,116 @@ def _draw_skeleton_2d(ax, C2, model, gap_frac=0.05):
     ax.axis("off")
 
 
-def _draw_sphere_depth(ax3, C3, model, elev=22.0, azim=-58.0, gap=0.13):
+def _perm_order_local(p):
+    seen, order = set(), 1
+    for start in range(len(p)):
+        if start in seen:
+            continue
+        L, x = 0, start
+        while True:
+            seen.add(x); x = p[x]; L += 1
+            if x == start:
+                break
+        order = order * L // math.gcd(order, L)
+    return order
+
+
+_SYM3D_CACHE = {}
+
+
+def _compute_sym3d(dt, C3):
+    """Run the V2_0 rotation-system + eigenvalue engine once for `dt` in the frame
+    of C3 and cache both the typed elements and the short point-group label
+    (Cn / Cs / Ci / Sn ...).  A full-loop reliability gate is applied inside."""
+    try:
+        comps = tuple(tuple(c) for c in CDT2.parse_dt(dt))          # dt is already canonical here
+        C3 = np.asarray(C3, float)
+        res = CDT2.symmetry_3d(comps, centers=C3, loops=CDT2._weave_loops(dt, C3))
+        out = {"elements": list(res.get("elements", [])),
+               "point_group": res.get("point_group", "").split("(")[0].strip()}
+    except Exception:  # noqa: BLE001
+        out = {"elements": [], "point_group": ""}
+    _SYM3D_CACHE[dt] = out
+    return out
+
+
+def _symmetry_axes_3d(dt, C3):
+    """True point-group elements (list of (kind, order, vec); kind in
+    {'axis','mirror','inversion','improper-axis'}, vec None for inversion), in the
+    frame of C3.  Replaces the old det-only method that mislabelled every improper
+    op 'mirror' (e.g. the Balanced clasp's inversion centre)."""
+    if dt in _SYM3D_CACHE:
+        return _SYM3D_CACHE[dt]["elements"]
+    return _compute_sym3d(dt, C3)["elements"]
+
+
+def _point_group_3d(dt):
+    """Short Schoenflies label of the diagram's true 3-D point group (from the
+    shared cache; populated once per representative during scoring)."""
+    return _SYM3D_CACHE.get(dt, {}).get("point_group", "")
+
+
+def _draw_symmetry_3d(ax3, sym_elems):
+    """Overlay the true point-group elements:
+      * rotation axis (Cn)     -> thin short-dashed line + Cn label, extended past the sphere;
+      * mirror plane (sigma)   -> translucent square reaching the sphere, thin short-dashed outline;
+      * inversion centre (i)   -> a small dot at the centre labelled 'i';
+      * rotoreflection (Sn)    -> thin short-dashed axis + Sn label (improper axis)."""
+    if not sym_elems:
+        return
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+    dash = (0, (2.4, 1.8))                        # short dashes, small gaps
+    # High z-orders + clip_on=False so the axis/label/dot/plane sit ABOVE the faint
+    # sphere skeleton (which is drawn at zorder 0) and are never clipped by the panel.
+    for kind, order, vec in sym_elems:
+        if kind in ("axis", "improper-axis"):
+            if vec is None:
+                continue
+            vec = np.asarray(vec, float); vec = vec / (np.linalg.norm(vec) + 1e-12)
+            p0, p1 = -1.6 * vec, 1.6 * vec        # extend out of the sphere
+            ax3.plot([p0[0], p1[0]], [p0[1], p1[1]], [p0[2], p1[2]],
+                     color="#111111", lw=1.0, ls=dash, alpha=0.95, zorder=30,
+                     clip_on=False)
+            lbl = ("C%d" % order) if kind == "axis" else ("S%d" % order)
+            for s in (1.0, -1.0):                 # label BOTH ends so one is always front-facing
+                ax3.text(s * 1.74 * vec[0], s * 1.74 * vec[1], s * 1.74 * vec[2], lbl,
+                         color="#111111", fontsize=9, fontweight="bold",
+                         ha="center", va="center", zorder=40, clip_on=False)
+        elif kind == "inversion":
+            # inversion centre: a dot at the origin, labelled i
+            ax3.scatter([0.0], [0.0], [0.0], c="#7e3f98", s=46, marker="o",
+                        edgecolors="#3a1d47", linewidths=0.6, zorder=32,
+                        depthshade=False, clip_on=False)
+            ax3.text(0.0, 0.0, 0.18, "i", color="#5b2d70", fontsize=11, fontweight="bold",
+                     ha="center", va="center", zorder=40, clip_on=False)
+        else:  # mirror plane -> translucent square reaching the sphere, labelled sigma
+            if vec is None:
+                continue
+            n = np.asarray(vec, float); n = n / (np.linalg.norm(n) + 1e-12)
+            e1 = np.cross(n, np.array([0.0, 0.0, 1.0]))
+            if np.linalg.norm(e1) < 1e-6:
+                e1 = np.cross(n, np.array([1.0, 0.0, 0.0]))
+            e1 = e1 / np.linalg.norm(e1)
+            e2 = np.cross(n, e1); e2 = e2 / (np.linalg.norm(e2) + 1e-12)
+            h = 1.05                              # half-side: edges reach the unit sphere
+            corners = np.array([h * e1 + h * e2, -h * e1 + h * e2,
+                                -h * e1 - h * e2, h * e1 - h * e2])
+            poly = Poly3DCollection([corners], facecolor="#7e3f98", edgecolor="none",
+                                    alpha=0.06, zorder=1)
+            poly.set_clip_on(False)
+            ax3.add_collection3d(poly)
+            loop = np.vstack([corners, corners[0]])
+            ax3.plot(loop[:, 0], loop[:, 1], loop[:, 2],
+                     color="#7e3f98", lw=1.0, ls=dash, alpha=0.95, zorder=28,
+                     clip_on=False)
+            lp = 1.22 * e1                        # sigma label just outside an edge of the square
+            ax3.text(lp[0], lp[1], lp[2], "σ", color="#5b2d70", fontsize=10,
+                     fontstyle="italic", fontweight="bold", ha="center", va="center",
+                     zorder=40, clip_on=False)
+
+
+def _draw_sphere_depth(ax3, C3, model, elev=22.0, azim=-58.0, gap=0.13, zoom=1.9,
+                       sym_elems=None):
     """3-D sphere layout: arcs ride on the sphere (renormalized), parallel arcs are
     bowed apart, and transparency is depth-cued (nearer = opaque, farther = faint)."""
     ax3.view_init(elev=elev, azim=azim)
@@ -1145,8 +1443,9 @@ def _draw_sphere_depth(ax3, C3, model, elev=22.0, azim=-58.0, gap=0.13):
                     math.cos(er) * math.sin(ar), math.sin(er)], float)
     u = np.linspace(0, 2 * np.pi, 26)
     v = np.linspace(0, np.pi, 13)
-    ax3.plot_wireframe(np.outer(np.cos(u), np.sin(v)), np.outer(np.sin(u), np.sin(v)),
-                       np.outer(np.ones_like(u), np.cos(v)), color="0.9", linewidth=0.2)
+    wf = ax3.plot_wireframe(np.outer(np.cos(u), np.sin(v)), np.outer(np.sin(u), np.sin(v)),
+                            np.outer(np.ones_like(u), np.cos(v)), color="0.9", linewidth=0.2)
+    wf.set_zorder(0); wf.set_clip_on(False)       # skeleton on the lowest layer, never clips
     arcs = _arc_list(model)
     off = _bow_offsets(arcs)
     ss = np.linspace(0, 1, 16)
@@ -1172,13 +1471,27 @@ def _draw_sphere_depth(ax3, C3, model, elev=22.0, azim=-58.0, gap=0.13):
             depth = float(np.dot((s0 + s1) / 2.0, eye))
             alpha = 0.12 + 0.83 * (depth + 1.0) / 2.0
             ax3.plot([s0[0], s1[0]], [s0[1], s1[1]], [s0[2], s1[2]],
-                     "-", lw=1.7, color=col, alpha=alpha, solid_capstyle="round")
+                     "-", lw=1.9, color=col, alpha=alpha, solid_capstyle="round",
+                     zorder=5, clip_on=False)
     dvals = C3 @ eye
     alphas = 0.2 + 0.8 * (dvals - dvals.min()) / (np.ptp(dvals) + 1e-9)
     for k in range(len(C3)):
         ax3.scatter(C3[k, 0], C3[k, 1], C3[k, 2], c="#222222",
-                    s=9, alpha=float(alphas[k]), depthshade=False)
-    ax3.set_box_aspect((1, 1, 1))
+                    s=9, alpha=float(alphas[k]), depthshade=False,
+                    zorder=6, clip_on=False)
+    _draw_symmetry_3d(ax3, sym_elems)                # overlay C2 axes / mirror planes / i dot
+    # EQUAL, symmetric data limits so the sphere renders ROUND.  Without this,
+    # Matplotlib auto-scales each axis independently to the plotted data; the symmetry
+    # overlays (axis to +-1.6*vec along a diagonal, labels at 1.74, mirror squares to
+    # ~1.48) extend the ranges ASYMMETRICALLY, so the cubic box aspect squeezes/stretches
+    # the unit sphere.  A fixed cube of half-width 1.8 contains every overlay and keeps
+    # all panels the same size.
+    _R = 1.8
+    ax3.set_xlim(-_R, _R); ax3.set_ylim(-_R, _R); ax3.set_zlim(-_R, _R)
+    try:
+        ax3.set_box_aspect((1, 1, 1), zoom=zoom)     # zoom fills the panel (bigger sphere)
+    except TypeError:
+        ax3.set_box_aspect((1, 1, 1))
     ax3.axis("off")
 
 
@@ -1190,77 +1503,346 @@ _DRAW_MIN_SEP = 0.02          # push apart non-incident strand pieces closer tha
 _SPHERE_VIEWS = [(22.0, -58.0), (22.0, 122.0)]   # two viewpoints (elev, azim), ~180 deg apart
 
 
+def _render_draw(ax, model, P, centers_d, col_of, show_labels):
+    try:
+        DDOL.render_diagram(ax, model, P, centers_d, color_of=col_of,
+                            show_labels=show_labels, arrows=True, lw=1.7, label_fontsize=5.5)
+    except Exception as exc:  # keep the grid robust
+        ax.text(0.5, 0.5, "render error:\n%s" % exc, ha="center", va="center",
+                fontsize=6, transform=ax.transAxes)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+
+def _strip_clip_paths(fig):
+    """Turn off clipping on every artist so the saved SVG contains no <clipPath>
+    masks (and nothing is cut off at panel edges).  Iterates all axes and their
+    descendant artists, clearing both the clip flag and any assigned clip path."""
+    for ax in fig.get_axes():
+        try:
+            ax.patch.set_clip_on(False)
+        except Exception:  # noqa: BLE001
+            pass
+        for art in ax.findobj():
+            try:
+                art.set_clip_on(False)
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                art.set_clip_path(None)
+            except Exception:  # noqa: BLE001
+                pass
+
+
 def make_figure(scored, path, max_draw=60):
     import textwrap
     reps = scored[:max_draw]
     n = len(reps)
     total = sum(m["_class"]["multiplicity"] for m in scored)
-    ncol = 3 + len(_SPHERE_VIEWS)   # text | draw | skeleton | sphere-view-1 | sphere-view-2
-    # one representative per ROW
-    fig = plt.figure(figsize=(3.0 * ncol + 5.0, 3.6 * n + 0.6))
-    gs = fig.add_gridspec(n, ncol, width_ratios=[1.25, 1.3, 1.05] + [1.0] * len(_SPHERE_VIEWS),
-                          hspace=0.28, wspace=0.05)
+    nsph = len(_SPHERE_VIEWS)
+    # columns: text | draw(labelled) | draw(no labels) | skeleton | sphere views...
+    ncol = 4 + nsph
+    fig = plt.figure(figsize=(3.15 * ncol + 3.6, 3.9 * n + 0.7))
+    # wider sphere columns (1.7) so the 3-D drawings are larger; clip is turned off
+    # everywhere (see end of this function) so nothing is cut at the panel edges.
+    gs = fig.add_gridspec(n, ncol, width_ratios=[1.05, 1.15, 1.15, 0.95] + [1.7] * nsph,
+                          hspace=0.30, wspace=0.02)
 
     for i, m in enumerate(reps):
         model = DDOL.build_model(DDOL.parse_dt(m["dt"]))
         G = DDOL.build_gadget_graph(model)
-        # shared shaped-tutte layout -> identical rotation in the drawing and the skeleton
+        # shared shaped-tutte layout -> identical rotation in the drawings and the skeleton
         P = DDOL.compute_positions(G, _DRAW_LAYOUT, tutte_opts=dict(_DRAW_TUTTE_OPTS))
         if _DRAW_MIN_SEP > 0:
-            P = DDOL.nudge_min_separation(P, G, _DRAW_MIN_SEP)   # min-separation relaxation
+            P = DDOL.nudge_min_separation(P, G, _DRAW_MIN_SEP)
         centers_d = DDOL.crossing_centers(model, P)
         C2 = np.array([centers_d[k] for k in range(len(model["crossings"]))], float)
         C3 = m["sphere3d"]["_centers3d"]
         rid = m["_class"]["rep_id"]
         col_of = lambda ci: _PALETTE[ci % len(_PALETTE)]
+        group = m["graph"].get("symmetry_group", "C%d" % m["graph"]["automorphism_order"])
 
-        # --- col 0: text (full DT code shown completely, wrapped) + metrics ---
+        # --- col 0: text (full CANONICAL DT code + metrics) ---
         axt = fig.add_subplot(gs[i, 0])
         axt.axis("off")
-        head = ("Rank %d   (rep #%d)\ncomposite = %.3f\nmultiplicity = %d / %d\n"
-                "symmetry = %d   3D-sym = C%d\nstrands = %s\nbending = %.1f"
-                % (m["rank"], rid, m["composite"], m["_class"]["multiplicity"], total,
-                   m["graph"]["automorphism_order"], m["sphere3d"]["sym3d_order"],
+        name, clasp = _diagram_name(m["dt"])
+        name_line = ("%s\n" % name) if name else ""
+        clasp_line = ("%s\n" % "\n".join(textwrap.wrap(clasp, width=34))) if clasp else ""
+        head = ("Rank %d   (rep #%d)\n%s%scomposite = %.3f\nmultiplicity = %d / %d\n"
+                "symmetry group = %s (order %d)\n3D dot pattern = %d-fold\n"
+                "strands = %s\nbending = %.1f"
+                % (m["rank"], rid, name_line, clasp_line,
+                   m["composite"], m["_class"]["multiplicity"], total,
+                   group, m["graph"]["automorphism_order"], m["sphere3d"]["sym3d_order"],
                    m["combinatorial"]["strand_visit_lengths"],
                    m["sphere3d"]["bending_energy"]))
         dt_wrapped = "\n".join(textwrap.wrap(m["dt"], width=30))
         axt.text(0.0, 1.0, head, transform=axt.transAxes, ha="left", va="top",
                  fontsize=9.5, fontweight="bold" if m["rank"] == 1 else "normal")
-        axt.text(0.0, 0.34, "DT code:", transform=axt.transAxes, ha="left", va="top",
+        axt.text(0.0, 0.30, "Canonical DT code:", transform=axt.transAxes, ha="left", va="top",
                  fontsize=8.5, style="italic")
-        axt.text(0.0, 0.27, dt_wrapped, transform=axt.transAxes, ha="left", va="top",
+        axt.text(0.0, 0.23, dt_wrapped, transform=axt.transAxes, ha="left", va="top",
                  fontsize=8.0, family="monospace")
 
-        # --- col 1: draw_dt_original_labels (shaped-tutte, ellipse, aspect 1, min-sep 0.02) ---
+        # --- col 1: draw_dt_original_labels WITH DT labels ---
         axd = fig.add_subplot(gs[i, 1])
-        try:
-            DDOL.render_diagram(axd, model, P, centers_d, color_of=col_of,
-                                show_labels=True, arrows=True, lw=1.6, label_fontsize=5.5)
-        except Exception as exc:  # keep the grid robust
-            axd.text(0.5, 0.5, "render error:\n%s" % exc, ha="center", va="center",
-                     fontsize=6, transform=axd.transAxes)
-        axd.set_aspect("equal")
-        axd.axis("off")
+        _render_draw(axd, model, P, centers_d, col_of, show_labels=True)
         if i == 0:
-            axd.set_title("draw_dt_original_labels\n(shaped-tutte ellipse, min-sep 0.02)", fontsize=9)
+            axd.set_title("draw_dt_original_labels\n(with DT labels)", fontsize=9)
 
-        # --- col 2: 2-D skeleton, SAME layout/rotation, parallel arcs bowed apart ---
-        ax2 = fig.add_subplot(gs[i, 2])
+        # --- col 2: draw_dt_original_labels WITHOUT labels (strands unobscured) ---
+        axd2 = fig.add_subplot(gs[i, 2])
+        _render_draw(axd2, model, P, centers_d, col_of, show_labels=False)
+        if i == 0:
+            axd2.set_title("draw_dt_original_labels\n(no labels)", fontsize=9)
+
+        # --- col 3: 2-D skeleton (same layout, parallel arcs bowed apart) ---
+        ax2 = fig.add_subplot(gs[i, 3])
         _draw_skeleton_2d(ax2, C2, model)
         if i == 0:
-            ax2.set_title("2-D skeleton (same layout)", fontsize=9)
+            ax2.set_title("2-D skeleton\n(same layout)", fontsize=9)
 
-        # --- cols 3+: 3-D sphere layout from two viewpoints, depth-shaded ---
+        # --- cols 4+: 3-D sphere, two viewpoints, depth-shaded, enlarged ---
+        # symmetry elements (C2 axes / mirror planes) overlaid on the 3-D layout
+        sym_elems = _symmetry_axes_3d(m["dt"], C3)
+        n_ax = sum(1 for k, o, v in sym_elems if k == "axis")
+        n_mir = sum(1 for k, o, v in sym_elems if k == "mirror")
+        n_inv = sum(1 for k, o, v in sym_elems if k == "inversion")
+        n_S = sum(1 for k, o, v in sym_elems if k == "improper-axis")
+        parts = []
+        if n_ax:
+            parts.append("C%d axis" % max((o for k, o, v in sym_elems if k == "axis"), default=2))
+        if n_mir:
+            parts.append("%d mirror%s" % (n_mir, "" if n_mir == 1 else "s"))
+        if n_inv:
+            parts.append("inversion centre (i)")
+        if n_S:
+            parts.append("%d S%d" % (n_S, max((o for k, o, v in sym_elems if k == "improper-axis"), default=2)))
+        sym_label = "3-D symmetry: " + (", ".join(parts) if parts else "none (C1)")
         for vi, (elev, azim) in enumerate(_SPHERE_VIEWS):
-            ax3 = fig.add_subplot(gs[i, 3 + vi], projection="3d")
-            _draw_sphere_depth(ax3, C3, model, elev=elev, azim=azim)
+            ax3 = fig.add_subplot(gs[i, 4 + vi], projection="3d")
+            _draw_sphere_depth(ax3, C3, model, elev=elev, azim=azim, sym_elems=sym_elems)
             if i == 0:
-                ax3.set_title("3-D sphere (view %d)" % (vi + 1), fontsize=9)
+                ax3.set_title("3-D sphere (view %d)\n%s" % (vi + 1, sym_label), fontsize=8)
+            elif vi == 0:
+                ax3.set_title(sym_label, fontsize=7)
 
     fig.suptitle("Representative diagrams of one link, ranked by composite score  "
-                 "(full DT codes at left; 3-D sphere shown from two viewpoints)",
+                 "(canonical DT codes at left; 3-D sphere from two viewpoints)",
                  fontsize=13, y=0.999)
+    fig.text(0.5, 0.004,
+             "On the 3-D spheres (true point group, up to mirror): a black dashed line = a "
+             "rotation (Cn) axis, a violet square labelled σ = a mirror plane, a violet dot "
+             "labelled i at the centre = an inversion centre, a dashed axis + Sn = a rotoreflection.",
+             ha="center", va="bottom", fontsize=8, color="#555555")
+    _strip_clip_paths(fig)                   # remove all clipping masks from the SVG
     fig.savefig(path, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _draw_tutte_opts(puncture=None):
+    """Copy of the shared draw options, optionally pinning a specific outer
+    ('puncture') face by its crossing-ID signature (a tuple of 'cN' tokens)."""
+    opts = dict(_DRAW_TUTTE_OPTS)
+    if puncture is not None:
+        opts["puncture_face"] = puncture
+    return opts
+
+
+def _draw_one(ax, dt, col_of, show_labels=False, rasterize=False, puncture=None):
+    """Render a single DT code with draw_dt_original_labels in its own shaped-tutte
+    layout.  ``puncture`` (a crossing-ID signature tuple) pins which face is turned
+    to the outside, so the SAME diagram can be drawn with different outer faces."""
+    model = DDOL.build_model(DDOL.parse_dt(dt))
+    G = DDOL.build_gadget_graph(model)
+    P = DDOL.compute_positions(G, _DRAW_LAYOUT, tutte_opts=_draw_tutte_opts(puncture))
+    if _DRAW_MIN_SEP > 0:
+        P = DDOL.nudge_min_separation(P, G, _DRAW_MIN_SEP)
+    centers_d = DDOL.crossing_centers(model, P)
+    _render_draw(ax, model, P, centers_d, col_of, show_labels)
+    if rasterize:
+        ax.set_rasterized(True)      # embed as a small raster in SVG -> fast, valid SVG
+
+
+def _largest_tie_face_signatures(dt):
+    """Crossing-ID signatures of the faces TIED for the largest boundary of a
+    diagram's planar embedding -- exactly the faces draw_dt could turn to the
+    outside (the 'puncture' choices).  When several tie, each gives a genuinely
+    different plane drawing of the SAME diagram; when one face is uniquely
+    largest there is a single (canonical) drawing.  Signatures are tuples of
+    'cN' tokens, matching draw_dt's puncture-face selector."""
+    model = DDOL.build_model(DDOL.parse_dt(dt))
+    G = DDOL.build_gadget_graph(model)
+    ok, emb = nx.check_planarity(G)
+    if not ok:
+        return []
+    faces = DDOL.planar_faces(emb)
+    if not faces:
+        return []
+    crossing_ids = DDOL.default_crossing_ids(model)
+    mx = max(len(f) for f in faces)
+    sigs, seen = [], set()
+    for f in faces:
+        if len(f) != mx:
+            continue
+        sig = DDOL._face_signature(f, crossing_ids)
+        if sig not in seen:
+            seen.add(sig)
+            sigs.append(sig)
+    return sigs
+
+
+def _puncture_distinct_drawings(dt, want, exclude=None):
+    """For one diagram, enumerate the largest-tie puncture faces and return up to
+    ``want`` puncture signatures whose drawings are pairwise distinct under
+    rotation / flip / strand-reversal, skipping any drawing key in ``exclude``.
+    Each returned signature turns a different face to the outside, so the panels
+    are the genuinely different plane pictures of the SAME diagram."""
+    out, seen = [], set(exclude or ())
+    for sig in _largest_tie_face_signatures(dt):
+        try:
+            key = _draw_congruence_key(dt, puncture=sig)
+        except Exception:  # noqa: BLE001
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(sig)
+        if len(out) >= want:
+            break
+    return out
+
+
+def _draw_congruence_key(dt, ndigits=3, puncture=None):
+    """Signature of a diagram's DRAWING (its draw_dt layout), invariant under planar
+    rotation, reflection (flip) and strand-direction reversal -- i.e. exactly the rigid
+    moves of the picture, and nothing else.  It is computed ONLY from the rendered
+    crossing positions (no DT-canonical form, no graph signature): the sorted, scale-
+    normalised multiset of pairwise crossing distances, which is unchanged by rotating,
+    mirroring or translating the picture (and by strand reversal, which leaves crossing
+    positions put).  Two raw codes share this key iff draw_dt draws them as the same
+    picture up to those moves; two codes of the SAME group that draw differently -- e.g.
+    with a different face turned to the outside -- get DIFFERENT keys and are both kept."""
+    from itertools import combinations
+    model = DDOL.build_model(DDOL.parse_dt(dt))
+    G = DDOL.build_gadget_graph(model)
+    P = DDOL.compute_positions(G, _DRAW_LAYOUT, tutte_opts=_draw_tutte_opts(puncture))
+    if _DRAW_MIN_SEP > 0:
+        P = DDOL.nudge_min_separation(P, G, _DRAW_MIN_SEP)
+    C = DDOL.crossing_centers(model, P)
+    pts = np.array([C[k] for k in range(len(model["crossings"]))], float)
+    if len(pts) < 2:
+        return (len(pts),)
+    pts = pts - pts.mean(axis=0)
+    d = np.sort(np.array([np.hypot(*(pts[i] - pts[j]))
+                          for i, j in combinations(range(len(pts)), 2)]))
+    mx = d[-1] if d[-1] > 0 else 1.0
+    return tuple(np.round(d / mx, ndigits))
+
+
+def _distinct_drawings(strings, want, max_scan=80, exclude=None):
+    """Pick up to `want` codes whose DRAWINGS are pairwise distinct under
+    rotation/flip/strand-reversal, scanning at most `max_scan` codes.  Any drawing
+    whose congruence key is in `exclude` is skipped -- used to drop raw codes that
+    draw the same as the canonical (which is shown separately)."""
+    out, seen = [], set(exclude or ())
+    for s in strings[:max_scan]:
+        try:
+            key = _draw_congruence_key(s)
+        except Exception:  # noqa: BLE001
+            key = ("err", s)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(s)
+        if len(out) >= want:
+            break
+    return out
+
+
+def make_raw_grouping_figure(classes, path, max_per_class=6, max_classes=40, rasterize=False):
+    """Show how the many RAW sampled diagrams collapse into the few de-duplicated ones.
+    Each row is one class: a text summary, its canonical diagram, then several RAW member
+    codes.  The raw members are drawn in their own layout, so they look like rotations /
+    reflections of each other -- which is exactly the equivalence used to group them."""
+    import textwrap
+    reps = classes[:max_classes]
+    K = max_per_class
+    ncol = 2 + K                                  # text | canonical | puncture drawings...
+    nrows = len(reps)
+    fig = plt.figure(figsize=(2.7 * ncol + 2.0, 3.25 * nrows + 1.0))
+    gs = fig.add_gridspec(nrows, ncol, width_ratios=[1.5, 1.25] + [1.1] * K,
+                          hspace=0.62, wspace=0.04)
+    col_of = lambda ci: _PALETTE[ci % len(_PALETTE)]
+
+    for i, cl in enumerate(reps):
+        canon = canonical_dt_string(cl["rep_dt"])
+
+        # PUNCTURE ENUMERATION: the different plane pictures of a SINGLE diagram come
+        # from turning different faces to the outside.  Rather than rely on which raw
+        # codes happened to be sampled, enumerate the faces TIED for the largest
+        # boundary -- exactly the faces draw_dt could pick as the outer 'puncture' --
+        # render the canonical diagram with each, and keep the ones that draw
+        # genuinely differently (rotation / flip / strand-reversal).  The canonical is
+        # drawn with its default (canonical) puncture in the blue-outlined slot, so we
+        # EXCLUDE that drawing; the remaining panels are the other distinct punctures.
+        try:
+            canon_key = _draw_congruence_key(canon)
+        except Exception:  # noqa: BLE001
+            canon_key = None
+        tie_sigs = _largest_tie_face_signatures(canon)
+        sample_sigs = _puncture_distinct_drawings(
+            canon, K, exclude={canon_key} if canon_key is not None else None)
+        n_shown = 1 + len(sample_sigs)                  # canonical + distinct punctures
+        capped = (len(sample_sigs) >= K)                # may be more distinct beyond the cap
+
+        name = _diagram_name(canon)[0]
+        head = ("Rank %d — %s" % (i + 1, name)) if name else ("Rank %d" % (i + 1))
+        axt = fig.add_subplot(gs[i, 0])
+        axt.axis("off")
+        txt = ("%s\n(group #%d)\n%d largest-face tie%s\n%d total occurrences\n"
+               "%s%d distinct drawing%s shown\n(incl. canonical)\n\ncanonical DT:\n%s"
+               % (head, cl["rep_id"], len(tie_sigs), "" if len(tie_sigs) == 1 else "s",
+                  cl["multiplicity"],
+                  "≥" if capped else "", n_shown, "" if n_shown == 1 else "s",
+                  "\n".join(textwrap.wrap(canon.replace("DT: ", ""), 24))))
+        axt.text(0.0, 1.0, txt, transform=axt.transAxes, va="top", ha="left", fontsize=8.5)
+
+        axc = fig.add_subplot(gs[i, 1])
+        _draw_one(axc, canon, col_of, show_labels=False, rasterize=rasterize)
+        for sp in axc.spines.values():
+            sp.set_visible(True)
+            sp.set_edgecolor("#2c7fb8")
+            sp.set_linewidth(2.0)
+        axc.set_title("canonical\n(default puncture)\n%s"
+                      % "\n".join(textwrap.wrap(canon.replace("DT: ", ""), 24)),
+                      fontsize=5.0 if i else 6.0)
+
+        for j in range(K):
+            ax = fig.add_subplot(gs[i, 2 + j])
+            if j < len(sample_sigs):
+                _draw_one(ax, canon, col_of, show_labels=False, rasterize=rasterize,
+                          puncture=sample_sigs[j])
+                cap = "puncture: " + "+".join(sample_sigs[j])
+                ax.set_title("\n".join(textwrap.wrap(cap, 24)), fontsize=5.5)
+            else:
+                ax.axis("off")
+
+    fig.suptitle("The distinct plane drawings of each diagram, by which face is turned to the outside\n"
+                 "(each row = one canonical group; the panels are the genuinely different DRAWINGS "
+                 "obtained by puncturing different largest-tie faces, de-duplicated by rotation / flip / "
+                 "strand-reversal of the picture)",
+                 fontsize=13, y=0.999)
+    fig.text(0.5, 0.004,
+             "Blue-outlined = canonical representative, drawn with its default puncture.  A diagram "
+             "lives on a sphere and draw_dt must turn one face to the outside; when several faces tie "
+             "for the largest boundary, each choice gives a different plane picture of the SAME diagram. "
+             "Each panel punctures a different tied face (labelled by the crossing IDs on it); drawings "
+             "that are rotations / mirrors of one another are merged.  A single tied face (or none shown) "
+             "means the diagram has one plane drawing.",
+             ha="center", va="bottom", fontsize=8, color="#555555")
+    _strip_clip_paths(fig)                   # remove all clipping masks from the SVG
+    fig.savefig(path, bbox_inches="tight", dpi=170 if rasterize else 100)
     plt.close(fig)
 
 
@@ -1272,117 +1854,251 @@ DEFAULT_DT = "DT: [(-8,-12,16),(-24,-22,-28,-26),(-10,-14,-2),(-20,-6,-18,-4)]"
 
 def launch_gui(defaults=None):
     """Tkinter front-end: fill in the parameters and press Run.  Launched when the
-    script is started with no arguments or with --gui."""
+    script is started with no arguments or with --gui.  Falls back to a CLI run if
+    Tkinter / a display is unavailable."""
     try:
         import tkinter as tk
-        from tkinter import scrolledtext, filedialog
+        from tkinter import scrolledtext, filedialog, messagebox
         root = tk.Tk()                       # fails here if there is no display
     except Exception as exc:  # no Tk / no display
-        print("Tkinter GUI unavailable (%s)." % exc)
-        print("Run with explicit CLI arguments such as --rounds, --xlsx, --svg, "
-              "and --checkpoint to start a headless scoring job.")
+        print("Tkinter GUI unavailable (%s); running the pipeline on the CLI instead.\n" % exc)
+        if defaults is not None:
+            defaults.gui = False
+            run_pipeline(defaults)
         return
 
     import threading
     import queue as _queue
 
-    def _apply_score_icon(window):
-        if not os.path.exists(SCORE_ICON_PNG):
-            return
-        try:
-            image = tk.PhotoImage(file=SCORE_ICON_PNG)
-            window.iconphoto(True, image)
-            window._score_diagram_icon = image
-        except Exception:
-            pass
-
     def dv(name, fallback):
         return str(getattr(defaults, name, fallback)) if defaults is not None else str(fallback)
 
-    _apply_score_icon(root)
-    root.title("DT Diagram Scorer  -  score_diagramV2_0")
+    root.title("DT Diagram Scorer  —  score_diagramV2_1")
     frm = tk.Frame(root, padx=10, pady=8)
     frm.pack(fill="x")
-    frm.columnconfigure(1, weight=1)
 
     # GUI default for "Reset to root" is 20 (respects a non-zero value passed via --reset-every).
     reset_default = getattr(defaults, "reset_every", 0) or 20
-    rows = [
-        ("dt", "DT code", dv("dt", DEFAULT_DT)),
-        ("rounds", "Rounds (simplifications)", dv("rounds", 99)),
-        ("backtrack_rounds", "Backtrack rounds", dv("backtrack_rounds", 200)),
-        ("backtrack_steps", "Backtrack steps", dv("backtrack_steps", 30)),
-        ("reset_every", "Reset to root every N (0=off)", reset_default),
-        ("seed", "Seed", dv("seed", 20260708)),
-        ("checkpoint", "Checkpoint file", dv("checkpoint", "chainV2.jsonl")),
-        ("max_draw", "Max diagrams drawn", dv("max_draw", 60)),
-        ("verify", "Verify sample (0=off, -1=all)", dv("verify", 0)),
-        ("xlsx", "Excel out (.xlsx, blank=skip)", getattr(defaults, "xlsx", "") or "diagram_scores.xlsx"),
-        ("svg", "SVG figure out (blank=skip)", getattr(defaults, "svg", "") or "diagram_scores.svg"),
-        ("json", "JSON out (blank=skip)", getattr(defaults, "json", "") or ""),
-    ]
+
     # output-file rows get a "Browse..." button (choose folder + file name via a save dialog)
     _save_dialog = {
+        "checkpoint": [("JSONL checkpoint", "*.jsonl")],
         "xlsx": [("Excel workbook", "*.xlsx")],
         "svg": [("SVG figure", "*.svg"), ("PNG image", "*.png")],
+        "raw_svg": [("SVG figure", "*.svg"), ("PNG image", "*.png")],
         "json": [("JSON", "*.json")],
     }
 
-    def _make_browser(var, filetypes, defext):
+    def _make_browser(var, filetypes, defext, confirm=True):
+        # confirm=False (checkpoint): pick an existing OR new file without the misleading
+        # "…already exists, replace?" prompt, since a checkpoint is resumed, not overwritten.
         def _browse():
             path = filedialog.asksaveasfilename(
-                title="Choose output location", defaultextension=defext,
+                title="Choose or open a checkpoint file" if not confirm else "Choose output location",
+                defaultextension=defext,
                 filetypes=filetypes + [("All files", "*.*")],
                 initialfile=os.path.basename(var.get() or ""),
-                initialdir=os.path.dirname(var.get() or "") or os.getcwd())
+                initialdir=os.path.dirname(var.get() or "") or os.getcwd(),
+                confirmoverwrite=confirm)
             if path:
                 var.set(path)
         return _browse
 
+    # per-field help shown by the light-blue "?" badge: (title, body-with-example)
+    HELP = {
+        "dt": ("DT code",
+               "The signed Dowker–Thistlethwaite code of the STARTING diagram, grouped by "
+               "component. A negative even number marks that the over-strand passes there. Every "
+               "alternative the search finds is the SAME link, just drawn differently.\n\n"
+               "Example:\nDT: [(-8,-12,16),(-24,-22,-28,-26),(-10,-14,-2),(-20,-6,-18,-4)]"),
+        "rounds": ("Rounds (simplifications)",
+               "How many simplify-and-perturb cycles to run. Each round yields one alternative "
+               "drawing of the same link, so more rounds explore more drawings (and take longer).\n\n"
+               "Example: 99 for a quick look, 999 for a thorough search."),
+        "backtrack_rounds": ("Backtrack rounds",
+               "Inside each round, how many times SnapPy randomly re-tangles then re-simplifies the "
+               "diagram to escape the current arrangement. Higher = more variety per round, slower.\n\n"
+               "Example: 200."),
+        "backtrack_steps": ("Backtrack steps",
+               "How many random crossing moves make up one backtrack attempt. Higher = a bigger "
+               "perturbation before re-simplifying.\n\nExample: 30."),
+        "reset_every": ("Reset to root every N rounds",
+               "Re-start the walk from the original DT every N rounds (0 = never). Stops the search "
+               "drifting into one region and keeps it sampling the full variety of drawings.\n\n"
+               "Example: 20."),
+        "seed": ("Seed (reproducibility)",
+               "The search is randomized — each round randomly tangles the diagram before "
+               "re-simplifying, which is how it finds different diagrams. The seed fixes that "
+               "randomness so the run is fully reproducible: the same seed always gives the same "
+               "diagrams and scores (and lets a run resume from its checkpoint and be re-run "
+               "identically for a paper). Change it to explore a different random path.\n\n"
+               "Example: 20260708."),
+        "verify": ("Verify sample",
+               "An extra EXACT isomorphism check on the grouped diagrams, on top of the fast "
+               "signature. 0 = off, -1 = check every member, N = check N per group. Use it to be "
+               "certain no genuinely different diagrams were merged. Recomputed every run, even "
+               "when resuming from a checkpoint.\n\nExample: 10."),
+        "max_draw": ("Max diagrams drawn",
+               "Cap on how many ranked representatives appear in the figure. Set it at or above the "
+               "number of distinct diagrams the search finds to show them all.\n\nExample: 60."),
+        "raw_max_per_class": ("Raw: distinct drawings per group",
+               "In the raw-grouping figure, how many DISTINCT drawings to show per group "
+               "(de-duplicated by rotation / flip / strand-reversal of the picture; the canonical is "
+               "always one of them).\n\nExample: 20."),
+        "write_raw": ("Write raw-grouping figure",
+               "When ticked, also write the raw-grouping figure — it shows how the many raw sampled "
+               "DRAWINGS collapse into the de-duplicated representatives (grouped in rank order, "
+               "de-duplicated by rotation / flip / strand-reversal of the picture). Untick it to "
+               "skip that figure; its path, per-group count and rasterize option then grey out."),
+        "checkpoint": ("Checkpoint file",
+               "A JSONL file (use Browse to choose its FOLDER and name) that records EVERY diagram "
+               "produced during generation — one line per round. It stores only the generation "
+               "chain, not scores or figures.\n\n"
+               "• Resume / extend: if the file already exists, generation continues from where it "
+               "stopped. Ask for more rounds to add only the difference — e.g. a 999-round file "
+               "re-run with Rounds = 1999 generates just the extra 1000 rounds. Asking for the same "
+               "or fewer rounds does no new generation.\n"
+               "• Always recomputed: dedup, Verify, scoring and ALL figures (including the raw "
+               "grouping) are rebuilt fresh from the loaded chain on every run — so changing Verify "
+               "or the raw settings and re-running takes effect without re-generating.\n"
+               "• Identical continuation needs the same DT, Seed, Backtrack settings and Reset-every "
+               "(the root DT must match the file, or the run is refused). A different Seed simply "
+               "explores a different additional path.\n\nExample: /path/to/chain999.jsonl."),
+        "xlsx": ("Excel output",
+               "Path for the metrics workbook (.xlsx); blank = skip. Contains every score, the "
+               "diagram names + clasp structure, and a colour-coded metric-direction legend.\n\n"
+               "Example: diagram_scores.xlsx."),
+        "svg": ("Ranked-figure SVG",
+               "Path for the main figure — each ranked diagram drawn four ways (labelled diagram, "
+               "2-D skeleton, and 3-D sphere from two views); blank = skip. A .png path also works.\n\n"
+               "Example: diagram_scores.svg."),
+        "raw_svg": ("Raw grouping SVG",
+               "Path for the figure showing how the many raw sampled DRAWINGS collapse into the "
+               "de-duplicated representatives (de-duplicated by rotation / flip / strand-reversal of "
+               "the picture only); blank = skip. A .png path also works.\n\nExample: grouping.svg."),
+        "json": ("JSON output",
+               "Path for the full machine-readable results (all metrics + any membership checks); "
+               "blank = skip.\n\nExample: results.json."),
+        "check": ("Check DT codes (membership test)",
+               "After the run, each DT code you paste here (one per line) is tested against the "
+               "diagrams that were found: the log reports whether an equivalent diagram was sampled "
+               "and which ranked representative it matches (and how often it occurred). Use it to "
+               "ask 'is this particular diagram among the ones my search produced?'"),
+    }
+
+    def _help_badge(parent, key):
+        title, body = HELP[key]
+        lbl = tk.Label(parent, text=" ? ", fg="#08306b", bg="#add8e6",
+                       font=("TkDefaultFont", 9, "bold"), cursor="hand2",
+                       relief="raised", bd=1)
+        lbl.bind("<Button-1>", lambda e, t=title, b=body: messagebox.showinfo(t, b))
+        return lbl
+
     vars_ = {}
-    for r, (key, label, val) in enumerate(rows):
-        tk.Label(frm, text=label, anchor="w").grid(row=r, column=0, sticky="w", pady=2)
+    widgets = {}          # key -> {"entry": Entry, "browse": Button|None}
+
+    def _full_row(key, label, val, browse=False):
         v = tk.StringVar(value=str(val))
-        tk.Entry(frm, textvariable=v, width=58).grid(row=r, column=1, sticky="we", padx=6, pady=2)
-        if key in _save_dialog:
-            ft = _save_dialog[key]
-            tk.Button(frm, text="Browse…",
-                      command=_make_browser(v, ft, ft[0][1].lstrip("*"))
-                      ).grid(row=r, column=2, sticky="w", padx=(0, 2))
         vars_[key] = v
+        row = tk.Frame(frm)
+        row.pack(fill="x", pady=2)
+        tk.Label(row, text=label, width=26, anchor="w").pack(side="left")
+        ent = tk.Entry(row, textvariable=v)
+        ent.pack(side="left", fill="x", expand=True, padx=4)
+        _help_badge(row, key).pack(side="left", padx=(2, 4))
+        btn = None
+        if browse and key in _save_dialog:
+            ft = _save_dialog[key]
+            btn = tk.Button(row, text="Browse…",
+                            command=_make_browser(v, ft, ft[0][1].lstrip("*"),
+                                                  confirm=(key != "checkpoint")))
+            btn.pack(side="left")
+        widgets[key] = {"entry": ent, "browse": btn}
+        return v
 
-    # --- why the seed matters (explained inline) ---
-    tk.Label(frm, anchor="w", justify="left", fg="#444444",
-             text="Seed: the search is randomized — each round randomly tangles the diagram before\n"
-                  "re-simplifying it, which is how it discovers different diagrams. The seed fixes that\n"
-                  "randomness so the run is fully reproducible: the same seed always yields the same\n"
-                  "sequence of diagrams and the same scores (and lets a run resume from its checkpoint\n"
-                  "and be re-run identically for a paper). Change it to explore a different random path.")\
-        .grid(row=len(rows), column=0, columnspan=3, sticky="w", pady=(8, 0))
+    def _num_pair(spec_a, spec_b):
+        # two single-number fields sharing one row (narrow entries)
+        row = tk.Frame(frm)
+        row.pack(fill="x", pady=2)
+        for spec in (spec_a, spec_b):
+            if spec is None:
+                continue
+            key, label, val = spec
+            v = tk.StringVar(value=str(val))
+            vars_[key] = v
+            tk.Label(row, text=label, width=16, anchor="w").pack(side="left")
+            ent = tk.Entry(row, textvariable=v, width=11)
+            ent.pack(side="left", padx=(0, 2))
+            _help_badge(row, key).pack(side="left", padx=(2, 18))
+            widgets[key] = {"entry": ent, "browse": None}
 
-    # --- Check DT codes: membership test (explained inline) ---
-    tk.Label(frm, text="Check DT codes (optional, one DT per line):",
-             anchor="w", font=("TkDefaultFont", 10, "bold"))\
-        .grid(row=len(rows) + 1, column=0, columnspan=3, sticky="w", pady=(10, 0))
-    tk.Label(frm, anchor="w", justify="left", fg="#444444",
-             text="After the run, each DT code you paste here is tested against the diagrams that\n"
-                  "were found: the log reports whether an equivalent diagram was sampled, and if so\n"
-                  "which ranked representative it matches (and how often it occurred). Use it to ask\n"
-                  "'is this particular diagram among the ones my search produced?'")\
-        .grid(row=len(rows) + 2, column=0, columnspan=3, sticky="w")
+    _full_row("dt", "DT code", dv("dt", DEFAULT_DT))
+    _num_pair(("rounds", "Rounds", dv("rounds", 99)),
+              ("backtrack_rounds", "Backtrack rounds", dv("backtrack_rounds", 200)))
+    _num_pair(("backtrack_steps", "Backtrack steps", dv("backtrack_steps", 30)),
+              ("reset_every", "Reset every N", reset_default))
+    _num_pair(("seed", "Seed", dv("seed", 20260708)),
+              ("verify", "Verify 0/-1/N", dv("verify", 10)))
+    _num_pair(("max_draw", "Max drawn", dv("max_draw", 60)),
+              ("raw_max_per_class", "Raw per group", dv("raw_max_per_class", 20)))
+    _full_row("checkpoint", "Checkpoint file", dv("checkpoint", "chainV2.jsonl"), browse=True)
+    _full_row("xlsx", "Excel out (blank=skip)",
+              getattr(defaults, "xlsx", "") or "diagram_scores.xlsx", browse=True)
+    _full_row("svg", "Ranked SVG (blank=skip)",
+              getattr(defaults, "svg", "") or "diagram_scores.svg", browse=True)
+
+    # --- raw-grouping figure: a checkbox gates its path + options (dynamic greying) ---
+    write_raw_var = tk.BooleanVar(value=bool((getattr(defaults, "raw_svg", "") or "").strip()))
+    raw_chk_row = tk.Frame(frm)
+    raw_chk_row.pack(fill="x", pady=(6, 0))
+    tk.Checkbutton(raw_chk_row, text="Write raw-grouping figure",
+                   variable=write_raw_var).pack(side="left")
+    _help_badge(raw_chk_row, "write_raw").pack(side="left", padx=6)
+    _full_row("raw_svg", "Raw grouping SVG",
+              getattr(defaults, "raw_svg", "") or "", browse=True)
+    _full_row("json", "JSON out (blank=skip)", getattr(defaults, "json", "") or "", browse=True)
+
+    # --- Check DT codes: membership test (explanation now lives in its "?" badge) ---
+    chk_hdr = tk.Frame(frm)
+    chk_hdr.pack(fill="x", pady=(10, 0))
+    tk.Label(chk_hdr, text="Check DT codes (optional, one DT per line)",
+             anchor="w", font=("TkDefaultFont", 10, "bold")).pack(side="left")
+    _help_badge(chk_hdr, "check").pack(side="left", padx=6)
     check_text = tk.Text(frm, width=64, height=4)
-    check_text.grid(row=len(rows) + 3, column=0, columnspan=3, sticky="we", pady=2)
+    check_text.pack(fill="x", pady=2)
 
     btns = tk.Frame(root, padx=10, pady=4)
     btns.pack(fill="x")
     run_btn = tk.Button(btns, text="Run")
     run_btn.pack(side="left")
+    raw_raster_var = tk.BooleanVar(value=bool(getattr(defaults, "raw_raster", False)))
+    raw_raster_chk = tk.Checkbutton(
+        btns, text="rasterize raw-grouping diagrams (faster/smaller; default = vector)",
+        variable=raw_raster_var)
+    raw_raster_chk.pack(side="left", padx=14)
     tk.Button(btns, text="Quit", command=root.destroy).pack(side="right")
+
+    # dynamic greying: the raw-grouping path + options are active only when the box is ticked
+    def _sync_raw_state(*_):
+        state = "normal" if write_raw_var.get() else "disabled"
+        for k in ("raw_svg", "raw_max_per_class"):
+            w = widgets.get(k, {})
+            if w.get("entry") is not None:
+                w["entry"].config(state=state)
+            if w.get("browse") is not None:
+                w["browse"].config(state=state)
+        raw_raster_chk.config(state=state)
+        if write_raw_var.get() and not vars_["raw_svg"].get().strip():
+            vars_["raw_svg"].set("diagram_scores_grouping.svg")   # sensible default when enabled
+
+    write_raw_var.trace_add("write", _sync_raw_state)
+    _sync_raw_state()          # apply the initial (default = off) greying
 
     log = scrolledtext.ScrolledText(root, width=104, height=20, font=("Menlo", 9))
     log.pack(fill="both", expand=True, padx=10, pady=(4, 10))
 
     q = _queue.Queue()
+    _done = object()          # sentinel: worker finished, re-enable the Run button
 
     class _QWriter:
         def write(self, s):
@@ -1392,10 +2108,15 @@ def launch_gui(defaults=None):
             pass
 
     def _poll():
+        # All widget updates happen here on the main thread, driven by the queue.
         try:
             while True:
-                log.insert("end", q.get_nowait())
-                log.see("end")
+                item = q.get_nowait()
+                if item is _done:
+                    run_btn.config(state="normal")     # re-enable for the next run
+                else:
+                    log.insert("end", item)
+                    log.see("end")
         except _queue.Empty:
             pass
         root.after(120, _poll)
@@ -1415,6 +2136,9 @@ def launch_gui(defaults=None):
                 verify=int(vars_["verify"].get() or 0),
                 xlsx=vars_["xlsx"].get().strip() or None,
                 svg=vars_["svg"].get().strip() or None,
+                raw_svg=(vars_["raw_svg"].get().strip() or None) if write_raw_var.get() else None,
+                raw_max_per_class=int(vars_["raw_max_per_class"].get() or 20),
+                raw_raster=raw_raster_var.get(),
                 json=vars_["json"].get().strip() or None,
                 check=[ln.strip() for ln in check_text.get("1.0", "end").splitlines() if ln.strip()],
                 check_file=None, gui=False,
@@ -1424,6 +2148,13 @@ def launch_gui(defaults=None):
             return
         run_btn.config(state="disabled")
         q.put("\n===== run started =====\n")
+        # Import SnapPy now, in the MAIN thread: on first import cypari/cysignals installs
+        # signal handlers, which is only allowed in the main thread.  The pipeline runs in a
+        # worker thread below, where its own `import snappy` is then a cached no-op.
+        try:
+            import snappy  # noqa: F401
+        except Exception as exc:  # noqa: BLE001
+            q.put("(SnapPy not available: %s)\n" % exc)
 
         def _worker():
             old = sys.stdout
@@ -1436,7 +2167,7 @@ def launch_gui(defaults=None):
                 print("ERROR:\n" + traceback.format_exc())
             finally:
                 sys.stdout = old
-                root.after(0, lambda: run_btn.config(state="normal"))
+                q.put(_done)                           # signal main thread to re-enable
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -1465,6 +2196,14 @@ def main(argv=None):
     ap.add_argument("--generate-only", action="store_true")
     ap.add_argument("--xlsx", default=None)
     ap.add_argument("--svg", default=None)
+    ap.add_argument("--raw-svg", default=None,
+                    help="also write an SVG showing how the raw sampled diagrams group into "
+                         "the de-duplicated representatives (rotation/flip equivalence)")
+    ap.add_argument("--raw-max-per-class", type=int, default=20,
+                    help="max distinct drawings shown per group in --raw-svg")
+    ap.add_argument("--raw-raster", action="store_true",
+                    help="rasterize the diagram panels in --raw-svg (faster/smaller SVG; "
+                         "default is full vector art, which is slower to write for many diagrams)")
     ap.add_argument("--json", default=None)
     ap.add_argument("--max-draw", type=int, default=60)
     ap.add_argument("--check", action="append", default=[],
@@ -1472,7 +2211,7 @@ def main(argv=None):
                          "(repeatable)")
     ap.add_argument("--check-file", default=None,
                     help="file with one DT code per line to test for membership")
-    ap.add_argument("--verify", type=int, default=0, metavar="N",
+    ap.add_argument("--verify", type=int, default=10, metavar="N",
                     help="confidence check: exact VF2 of each class rep against up to N "
                          "other distinct members (0 = off; use a large N or -1 for all)")
     ap.add_argument("--gui", action="store_true",
@@ -1539,13 +2278,30 @@ def run_pipeline(args, log=None):
     print("Scoring representatives ...", flush=True)
     scored = score_representatives(classes)
 
+    # Pre-compute the true 3-D point group once per representative (shared by the
+    # xlsx "3D point group" column and the SVG symmetry overlays), in each rep's
+    # own 3-D frame so the drawn axes/planes/inversion dot are correctly oriented.
+    for m in scored:
+        try:
+            _compute_sym3d(m["dt"], m["sphere3d"]["_centers3d"])
+        except Exception:  # noqa: BLE001
+            pass
+
     fps = set(m["linking_fp"] for m in scored if m["linking_fp"] is not None)
     print("  same-link check: %d distinct linking-number fingerprint(s) among "
           "representatives (expected 1: all are the same link by construction)"
           % len(fps), flush=True)
 
+    # Raw-grouping figure: built AFTER scoring so its groups appear in the SAME order
+    # (by composite rank) as the ranked figure, and are labelled with rank + name.
+    if getattr(args, "raw_svg", None):
+        make_raw_grouping_figure([m["_class"] for m in scored], args.raw_svg,
+                                 max_per_class=getattr(args, "raw_max_per_class", 6),
+                                 rasterize=getattr(args, "raw_raster", False))
+        print("wrote %s" % args.raw_svg, flush=True)
+
     run_info = {
-        "software": "score_diagramV2_0.py",
+        "software": "score_diagramV2_1.py",
         "root_DT": args.dt,
         "rounds": args.rounds,
         "backtrack_rounds": args.backtrack_rounds,

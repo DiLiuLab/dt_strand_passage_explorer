@@ -34,7 +34,8 @@ draw_dt_original_labelsV5_5.py   DT parser, layout, renderer, XYZ audit, and GUI
 audit_xyz.py                     Audit a 3D XYZ curve against its signed DT link
 check_two_dt.py                  Standalone SnapPy/Sage DT-comparison utility
 find_link_in_snappy.py           Search SnapPy link databases for DT matches
-score_diagramV2_0.py             Generate, deduplicate, score, and rank diagrams
+score_diagramV2_1.py             Generate, deduplicate, score, and rank diagrams
+canonical_dt_V2_0.py             Canonical DT code (up to mirror) and symmetry
 assets/strand_passage_icon.png   Optional window/task-menu icon
 assets/score_diagram_icon.png    Optional icon for the diagram scoring GUI
 bin/strand-passage               Convenience launcher for the strand-passage GUI
@@ -110,10 +111,6 @@ Anything after the tool name is forwarded to that tool, so
 `DT_Link_Toolkit.py draw --help` shows the drawing tool's own options. Use
 `--menu` for a text menu instead of the GUI, and `--list` to see the exact script
 file each tool resolves to along with the interpreters found.
-
-The `canonical` tool is wired into the launcher, but no `canonical_dt` script is
-tracked in this repository yet; until one is added the launcher lists it as
-`(not found)` and its button stays disabled.
 
 The launcher does not hard-code version numbers: for each tool it finds every
 matching `<name>*.py` in this directory and picks the highest version, so a newer
@@ -353,8 +350,8 @@ loose numeric fallback. Input files may contain one DT code per line, or
 Diagram scoring utility:
 
 ```bash
-sage -python score_diagramV2_0.py --help
-sage -python score_diagramV2_0.py \
+sage -python score_diagramV2_1.py --help
+sage -python score_diagramV2_1.py \
   --dt "DT: [(4,6,2)]" \
   --rounds 0 \
   --checkpoint results/score_chain.jsonl \
@@ -363,11 +360,36 @@ sage -python score_diagramV2_0.py \
   --json results/diagram_scores.json
 ```
 
-With no arguments, `score_diagramV2_0.py` opens a small Tk GUI for configuring a
+With no arguments, `score_diagramV2_1.py` opens a small Tk GUI for configuring a
 run. The tool generates alternative simplified DT diagrams of the same link,
 deduplicates signed diagram isomorphs, scores each representative, and writes an
 Excel workbook plus optional SVG/JSON reports. Long runs can use
 `--generate-only --max-seconds N` and resume from the checkpoint.
+
+Canonical DT code and symmetry:
+
+```bash
+python3 canonical_dt_V2_0.py --dt "DT: [(4,6,2)]"
+python3 canonical_dt_V2_0.py --dt "DT: [(4,6,2)]" --ops
+python3 canonical_dt_V2_0.py       # no arguments -> graphical interface
+```
+
+`canonical_dt_V2_0.py` reduces a signed DT code to its canonical
+representative — the lexicographically smallest legal code over all
+re-encodings (loop order, start point, traversal direction) and the whole-code
+sign inversion — and reports the diagram's symmetry. Because the sign inversion
+is included, the canonical form is taken **up to mirror**: a diagram and its
+mirror share one canonical code, so it identifies the diagram but not its
+chirality. Use SnapPy or the Jones polynomial when chirality matters.
+
+Two symmetries are reported, and they answer different questions. The
+combinatorial symmetry (`symmetry_order` / `element_orders`) counts the DT
+re-encodings that reproduce the canonical code — exact, tolerance-free, always
+available, and what `score_diagramV2_1.py` uses to name a diagram's group. The
+3-D symmetry (`sym3d`) is the point group of the drawn embedding, found via the
+rotation system and an eigenvalue fit; it is richer (mirrors, inversion,
+rotoreflections) but needs the drawing engine and a numerical tolerance, so it
+can be unavailable where the combinatorial count still succeeds.
 
 ## Pull Updates
 
