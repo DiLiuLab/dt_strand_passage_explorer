@@ -65,10 +65,10 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def _find_base(filename):
-    # old_scripts/ is searched as a fallback so archived-but-still-imported helpers
-    # (e.g. canonical_dt.py V1, now retired there) keep resolving.
-    for base in (_HERE, os.path.join(_HERE, "old_scripts"), os.getcwd(),
-                 os.environ.get("DDOL_DIR", "")):
+    # Deliberately does NOT search old_scripts/.  That directory is excluded from
+    # git, so a helper resolved there imports fine here and is simply absent in a
+    # clone -- the failure is invisible locally and total for everyone else.
+    for base in (_HERE, os.getcwd(), os.environ.get("DDOL_DIR", "")):
         if base and os.path.exists(os.path.join(base, filename)):
             return base
     return None
