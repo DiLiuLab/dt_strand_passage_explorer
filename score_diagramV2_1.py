@@ -526,9 +526,15 @@ def _quality_scores(m):
     # the planar-embedding face spectrum, and the 3-D sphere layout.
     c, g, q3 = m["combinatorial"], m["graph"], m["sphere3d"]
     strand_balance = 0.5 * c["strand_balance_entropy"] + 0.5 * (1.0 / (1.0 + c["strand_length_cv"]))
+    # Both terms are topological and sign-aware: the combinatorial automorphism
+    # order and the loop-gated 3-D point-group order.  The dot-only sym3d_score is
+    # deliberately NOT used -- it false-positives on low-symmetry diagrams and is
+    # kept as a descriptive column only.
     aut = g["automorphism_order"]
+    order3d = q3.get("point_group_order_3d", aut)
     sym_comb = 1.0 - 1.0 / max(1, aut)
-    diagram_symmetry = np.mean([sym_comb, q3["sym3d_score"]])
+    sym_3d = 1.0 - 1.0 / max(1, order3d)
+    diagram_symmetry = np.mean([sym_comb, sym_3d])
     # 'face regularity' replaces the old puncture-dependent 'geometric strain':
     # face-degree CV and the bigon count are properties of the planar embedding
     # (the combinatorial map), independent of the outer-face choice.
@@ -560,6 +566,11 @@ def score_diagram(dt_string, negative_even="over"):
     # canonical DT relabellings; replaces the fragile VF2 automorphism enumeration.
     m["graph"]["automorphism_order"] = canonical_symmetry(dt_string)
     m["graph"]["symmetry_group"] = canonical_group(dt_string)
+    # Loop-aware 3-D point-group order, computed here (before scoring) in this
+    # diagram's own 3-D frame.  Feeds diagram_symmetry and also warms the shared
+    # cache the descriptive "3D point group" column reads from.
+    m["sphere3d"]["point_group_order_3d"] = _point_group_order_3d(
+        dt_string, m["sphere3d"]["_centers3d"], m["graph"]["automorphism_order"])
     m["quality"] = _quality_scores(m)
     m["composite"] = float(sum(WEIGHTS[k] * m["quality"][k] for k in WEIGHTS) / sum(WEIGHTS.values()))
     return m
@@ -1140,6 +1151,7 @@ _DESCRIPTIVE_COLS = {
     "Dirichlet energy",
     "Crossing angle dev (deg)",
     "2D symmetry score",
+    "3D dot-pattern symmetry",
 }
 
 
@@ -1265,10 +1277,10 @@ _METRIC_LEGEND = [
     ("Sphere spread quality", "higher = better", "Evenness of the spread on the sphere vs ideal; 1 = ideal."),
     ("3D strand length CV", "lower = better", "Evenness of strand lengths measured on the 3-D sphere."),
     ("Bending energy", "lower = better", "How sharply strands turn in 3-D; lower = gentler, relaxed curves."),
-    ("3D dot-pattern symmetry", "higher = better", "Largest rotational symmetry of the crossing POSITIONS only in the 3-D layout (a k-fold dot pattern); IGNORES over/under and crossing signs -- NOT a signed-diagram symmetry, so it can overstate the true symmetry. Use 'Symmetry order'/'Symmetry group' for the sign-respecting value."),
+    ("3D dot-pattern symmetry", "descriptive", "DESCRIPTIVE ONLY (not scored): largest rotational symmetry of the crossing POSITIONS only in the 3-D layout (a k-fold dot pattern); IGNORES over/under and crossing signs, so it false-positives on low-symmetry diagrams (e.g. a spurious 2-fold on the C1 Lopsided and Cs Offset clasps) -- excluded from the composite. The composite's 'q: diagram symmetry' uses the loop-gated '3D point group' order instead. Use 'Symmetry order'/'Symmetry group'/'3D point group' for the sign-respecting values."),
     ("3D point group", "descriptive", "True Schoenflies point group of the 3-D spherical embedding (up to mirror): rotation axes (Cn) classified vs improper operations sub-typed by eigenvalues -- mirror plane (Cs), inversion centre (Ci), rotoreflection (Sn) -- with a full-loop reliability gate. E.g. Orthogonal rosette C2v, Balanced clasp Ci (inversion centre; NOT Cs), Offset clasp Cs, Lopsided clasp C1."),
     ("q: strand balance", "higher = better", "0-1 quality for even strands."),
-    ("q: diagram symmetry", "higher = better", "0-1 quality for symmetry (sign-aware automorphism + 3-D dot pattern; the puncture-dependent 2-D symmetry is no longer included)."),
+    ("q: diagram symmetry", "higher = better", "0-1 quality for symmetry: mean of the sign-aware combinatorial automorphism order and the loop-gated 3-D point-group order (both as 1 - 1/order). Both are topological; the dot-only 3-D dot-pattern symmetry and the puncture-dependent 2-D symmetry are descriptive only and NOT included."),
     ("q: face regularity", "higher = better", "0-1 quality for a regular planar tiling: low face-degree CV and few bigons. Computed from the planar embedding (independent of the puncture); replaces the former 2-D 'geometric strain'."),
     ("q: sphere energy", "higher = better", "0-1 quality for even, relaxed 3-D layout."),
     ("COMPOSITE", "higher = better", "Overall 0-1 score; higher = better synthesis blueprint."),
@@ -1365,10 +1377,11 @@ def _compute_sym3d(dt, C3):
         comps = tuple(tuple(c) for c in CDT2.parse_dt(dt))          # dt is already canonical here
         C3 = np.asarray(C3, float)
         res = CDT2.symmetry_3d(comps, centers=C3, loops=CDT2._weave_loops(dt, C3))
-        out = {"elements": list(res.get("elements", [])),
+        out = {"order": int(res.get("order", 0)),                   # loop-gated point-group order (incl. identity)
+               "elements": list(res.get("elements", [])),
                "point_group": res.get("point_group", "").split("(")[0].strip()}
     except Exception:  # noqa: BLE001
-        out = {"elements": [], "point_group": ""}
+        out = {"order": 0, "elements": [], "point_group": ""}
     _SYM3D_CACHE[dt] = out
     return out
 
@@ -1387,6 +1400,25 @@ def _point_group_3d(dt):
     """Short Schoenflies label of the diagram's true 3-D point group (from the
     shared cache; populated once per representative during scoring)."""
     return _SYM3D_CACHE.get(dt, {}).get("point_group", "")
+
+
+def _point_group_order_3d(dt, C3, aut_fallback=1):
+    """Order of the diagram's loop-aware 3-D point group -- the number of symmetry
+    operations including the identity (C1 -> 1, C2/Cs/Ci -> 2, C2v -> 4, D3 -> 6).
+
+    Uses the same loop-gated engine as the '3D point group' label
+    (CDT2.symmetry_3d), so it counts only operations that map the actual 3-D loops
+    -- strands woven in/out with over/under -- onto themselves.  This is the
+    topological symmetry, unlike _best_rotational_symmetry_3d, which inspects only
+    the crossing-dot positions and false-positives on low-symmetry diagrams (it
+    reports a spurious order-2 rotation for the C1 Lopsided and Cs Offset clasps).
+    Falls back to the sign-aware combinatorial automorphism order if the 3-D engine
+    is unavailable or returns nothing."""
+    info = _SYM3D_CACHE.get(dt) or _compute_sym3d(dt, C3)
+    order = info.get("order", 0)
+    if order and order >= 1:
+        return int(order)
+    return max(1, int(aut_fallback))
 
 
 def _draw_symmetry_3d(ax3, sym_elems):
