@@ -9,6 +9,33 @@ Draw a smooth planar oriented link diagram from a signed Dowker-Thistlethwaite
 
 V5.5 changes
 ------------
+* 3D: new "cubic-kamada" sphere layout (--sphere-layout cubic-kamada) that maps
+  the spherical-kamada construction onto a CUBE.  A detected cyclic symmetry of
+  the DT is aligned with a matching cube symmetry axis (4-fold -> a face normal,
+  3-fold -> a body diagonal, 2-fold -> an edge; else the diagram's 3-D PCA axis).
+  Two strand styles via --cube-style / GUI 'cube style':
+  - 'smooth' (default): the strands ride the cube faces as smooth curves, with
+    over/under a bump out of / dip into the local face (an L-infinity sphere->cube
+    warp, reusing the shaped-surface over/under + clearance-repair + topology
+    audit pipeline).
+  - 'angled': a 3-shell gadget router -- crossings on the middle cube shell, the
+    over-pass on the outer shell (R+off) and the under-pass on the inner shell
+    (R-off), and each connector between consecutive crossings at most three
+    axis-aligned segments (one per cube axis).  Strands turn only 90 degrees and
+    over/under strands cross at 90 degrees.  A detected cyclic symmetry is snapped
+    to exact k-fold symmetry about the aligned cube axis and the connector rule is
+    equivariant, so the wire routing is exactly symmetric; local backtracks/loops
+    are removed.  This is clean and minimal for single-component / sparse links
+    (e.g. the trefoil: 18 corners, exact 3-fold symmetry).  For a denser link
+    whose minimal free wires would self-cross, the angled style instead
+    orthogonalises the (disjoint) smooth cube curve and collapses its staircases
+    as far as the inter-strand clearance allows -- a COLLISION-FREE, topology-
+    preserving axis-aligned routing (still 90-degree only, over/under via the
+    radial bump), though not as minimal and only best-effort symmetric.  So
+    multi-component links still get a valid angled diagram; the exported curve is
+    always a valid embedding.
+  Verified topology-preserving: on a hyperbolic test link the cubic curve audits
+  to the same hyperbolic volume as spherical-kamada.
 * GUI: 'Auto preview update' checkbox at the top of the right control panel
   (default on).  When off, editing parameters no longer recomputes the 2D
   preview on every change -- useful when the recompute is slow on large diagrams
@@ -609,6 +636,7 @@ GUI_HELP_TEXT = {
     "show_tutte_outline": "Overlay the layout's shape outline(s), in both the live preview and any saved image. For shaped-tutte: the boundary outline and its aspect (long) axis. For holed-tutte: both the outer and inner ring outlines. Only shown for the shaped-tutte / holed-tutte layouts.",
     "show_tutte_pca": "Overlay the layout's principal axis, in both the live preview and any saved image. For shaped-tutte: the diagram's intrinsic (circular-Tutte) PCA elongation axis (with 'show shape outline', the angle between the two equals 'tutte orient deg'). For holed-tutte: the mid-ring closed principal curved axis. Only shown for the shaped-tutte / holed-tutte layouts.",
     "surface_shape": "Target surface for the shaped-kamada sphere layout: ellipsoid, cylinder, or torus. The spherical construction is warped onto this surface and the over/under crossing offset follows the local surface normal. Only used when sphere layout is shaped-kamada.",
+    "cube_style": "For the cubic-kamada sphere layout, how strands are drawn on the cube. 'smooth' maps them as smooth curves on the cube faces (like the sphere); 'angled' routes them as axis-aligned 90-degree segments so strands turn only 90 degrees and over/under strands cross at 90 degrees (a right-angle bridge). Over/under is a bump out of / dip into the local face either way. A detected cyclic symmetry is aligned with a matching cube axis (4-fold to a face, 3-fold to a body diagonal, 2-fold to an edge), else the diagram's PCA axis. Only used when sphere layout is cubic-kamada.",
     "surface_auto_orient": "Shaped-kamada auto orient. When on, the surface's primary axis (ellipsoid major, cylinder length, torus symmetry) is aligned to the diagram's principal (3D PCA) axis. When off, 'surface orient deg' spins the mapping about that primary axis, measured from the PCA axis. Independent of auto aspect.",
     "surface_auto_aspect": "Shaped-kamada auto aspect. When on, the surface proportions (ellipsoid axis ratios, cylinder length/radius, or torus tube ratio) are derived from the diagram's own 3D PCA magnitudes so the surface is as elongated as the diagram. It does NOT equalize strand lengths. When off, the manual surface aspect / tube values are used. Independent of orientation.",
     "surface_aspect": "Dimensionless ratio for shaped-kamada when auto aspect is off: ellipsoid major/minor, or cylinder length/radius. Suggested range 1.0-3.0. Ignored by the torus. Default: 1.6.",
@@ -624,7 +652,7 @@ GUI_HELP_TEXT = {
     "line_width": "2D strand line width in Matplotlib points. Default: 2.0.",
     "gap_frac": "Under-strand gap size in the 2D image. This is a ratio of the overall 2D diagram span, not an absolute coordinate distance. Default: 0.025.",
     "over_gap_factor": "Length of the colored OVER-strand piece redrawn on top of each crossing gap, as a multiple of the under-strand gap. At each crossing the under strand is masked with a white piece and the over strand is then redrawn over it; if this piece is too short a white nick shows at the crossing. Must be > 1 so the over strand fully covers the white mask; increase for thicker lines or if nicks appear. Default: 2.0.",
-    "sphere_layout": "XYZ sphere layout. spherical-kamada distributes the graph directly over the sphere and is best for symmetric spherical models. shaped-kamada warps that construction onto a shaped surface. stereographic maps the current 2D drawing onto a sphere. stereo-safe uses the audited planar layout, stereographically lifts it, and adds only radial crossing bumps; it is the correct-by-construction choice when a dense Kamada layout fails the topology audit.",
+    "sphere_layout": "XYZ sphere layout. spherical-kamada distributes the graph directly over the sphere and is best for symmetric spherical models. shaped-kamada warps that construction onto a shaped surface. cubic-kamada maps it onto a cube, aligning a detected cyclic symmetry with a matching cube axis (see cube style for smooth vs 90-degree-angled strands). stereographic maps the current 2D drawing onto a sphere. stereo-safe uses the audited planar layout, stereographically lifts it, and adds only radial crossing bumps; it is the correct-by-construction choice when a dense Kamada layout fails the topology audit.",
     "sphere_radius": "Base radius of the sphere in XYZ coordinate units. Default: 50.0. With crossing offset = 0, all XYZ points lie at this radius.",
     "sphere_extent": "Only used by stereographic. Dimensionless. After centering the 2D drawing, the farthest planar point is scaled to this radius before inverse stereographic projection. 1.0 reaches the equator; larger values use more of the southern hemisphere.",
     "crossing_offset": "Absolute radial offset in XYZ coordinate units, not a ratio. Over-layer radius is R + offset; under-layer radius is R - offset. Default: 5.0. Use 0 for a perfect sphere with no height separation.",
@@ -5412,6 +5440,613 @@ def _warp_components_to_surface(xyz_components, sphere_radius, surface_shape,
 
 
 # --------------------------------------------------------------------------
+# V5.5: cubic-kamada layout -- map the spherical construction onto a CUBE.
+#
+# The spherical curve (unit direction + signed over/under offset per point) is
+# oriented so a detected cyclic symmetry of the DT aligns with a matching cube
+# symmetry axis, then either warped smoothly onto the cube surface or routed as
+# axis-aligned 90-degree segments.  Over/under stays a normal offset (a bump out
+# of / dip into the local cube face), exactly as on the sphere and shaped
+# surfaces, so the existing clearance-repair and topology-audit stages apply
+# unchanged.
+# --------------------------------------------------------------------------
+
+def _skew3(v):
+    x, y, z = float(v[0]), float(v[1]), float(v[2])
+    return np.array([[0.0, -z, y], [z, 0.0, -x], [-y, x, 0.0]], float)
+
+
+def _rotation_bringing(t, a):
+    """Proper rotation R with R @ t = a (both unit vectors)."""
+    t = _normalize_vector(t)
+    a = _normalize_vector(a)
+    v = np.cross(t, a)
+    c = float(np.dot(t, a))
+    s = float(np.linalg.norm(v))
+    if s < 1.0e-9:
+        if c > 0.0:
+            return np.eye(3)
+        # antiparallel: 180 deg about any axis perpendicular to t
+        ref = np.array([1.0, 0.0, 0.0]) if abs(t[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+        perp = _normalize_vector(np.cross(t, ref))
+        K = _skew3(perp)
+        return np.eye(3) + 2.0 * (K @ K)      # Rodrigues at angle pi
+    K = _skew3(v)
+    return np.eye(3) + K + K @ K * ((1.0 - c) / (s * s))
+
+
+def _kabsch_rotation(A, B):
+    """Proper rotation R minimizing ||R a_i - b_i||, i.e. R @ a_i ~ b_i."""
+    A = np.asarray(A, float)
+    B = np.asarray(B, float)
+    H = A.T @ B
+    U, _s, Vt = np.linalg.svd(H)
+    d = np.sign(np.linalg.det(Vt.T @ U.T))
+    D = np.diag([1.0, 1.0, d])
+    return Vt.T @ D @ U.T
+
+
+def _rotation_axis_angle(R):
+    """(unit axis, angle in [0, pi]) of a 3x3 proper rotation; axis sign is free."""
+    R = np.asarray(R, float)
+    ang = math.acos(float(np.clip((np.trace(R) - 1.0) / 2.0, -1.0, 1.0)))
+    vals, vecs = np.linalg.eig(R)
+    i = int(np.argmin(np.abs(vals - 1.0)))
+    axis = np.real(vecs[:, i])
+    n = float(np.linalg.norm(axis))
+    if n < 1.0e-9:
+        return None, ang
+    return axis / n, ang
+
+
+def _detect_symmetry_axis_3d(model, anchors):
+    """3-D axis of the DT's largest cyclic symmetry, from the crossing anchors.
+
+    Uses ``_detect_dt_rotational_symmetry`` for the combinatorial rotation, fits
+    the geometric rotation that realizes it on the sphere anchors (Kabsch), and
+    returns ``(unit_axis, k)`` only when that rotation is a clean 2*pi/k turn.
+    """
+    sym = _detect_dt_rotational_symmetry(model)
+    if not sym:
+        return None
+    k, snode = sym
+    anchors = np.asarray(anchors, float)
+    ncr = len(model["crossings"])
+    if ncr < 2 or anchors.shape[0] != ncr:
+        return None
+    try:
+        perm = [int(snode((i, "over"))[0]) for i in range(ncr)]
+    except Exception:  # noqa: BLE001
+        return None
+    if sorted(perm) != list(range(ncr)):
+        return None
+    A = anchors - anchors.mean(axis=0)
+    B = A[perm]
+    R = _kabsch_rotation(A, B)
+    resid = float(np.sqrt(np.mean(np.sum((A @ R.T - B) ** 2, axis=1))))
+    scale = float(np.sqrt(np.mean(np.sum(A ** 2, axis=1)))) + 1.0e-12
+    axis, ang = _rotation_axis_angle(R)
+    if axis is None:
+        return None
+    target_ang = 2.0 * math.pi / k
+    if resid / scale > 0.20:
+        return None
+    if min(abs(ang - target_ang), abs(ang - (2.0 * math.pi - target_ang))) > 0.45:
+        return None
+    return axis, k
+
+
+def _cube_target_axis(k):
+    """Cube symmetry axis matching cyclic order ``k`` (highest cube-compatible
+    divisor): 4 -> face normal, 3 -> body diagonal, 2 -> edge; else None."""
+    if k % 4 == 0:
+        return np.array([0.0, 0.0, 1.0]), 4
+    if k % 3 == 0:
+        return np.array([1.0, 1.0, 1.0]) / math.sqrt(3.0), 3
+    if k % 2 == 0:
+        return np.array([1.0, 1.0, 0.0]) / math.sqrt(2.0), 2
+    return None, 0
+
+
+def _cube_orientation_frame(model, anchors, dirs_all):
+    """Rotation ``M`` (applied as ``d @ M``) placing the diagram on an
+    axis-aligned cube.  A detected cyclic symmetry aligns with the matching cube
+    axis; otherwise the diagram's 3-D PCA major axis is stood up along +z.
+    Returns ``(M, info)`` where info = (mode, k, cube_order)."""
+    sym = _detect_symmetry_axis_3d(model, anchors) if anchors is not None else None
+    if sym is not None:
+        axis, k = sym
+        target, order = _cube_target_axis(k)
+        if target is not None:
+            # M maps target -> axis, so d @ M sends the diagram axis onto target.
+            M = _rotation_bringing(target, axis)
+            return M, ("symmetry", k, order)
+    pts = np.asarray(dirs_all, float)
+    if pts.shape[0] >= 3:
+        evecs, _evals = _pca_frame_3d(pts)
+        M = np.column_stack([evecs[:, 2], evecs[:, 1], evecs[:, 0]])  # major -> +z
+        if np.linalg.det(M) < 0.0:
+            M[:, 0] = -M[:, 0]
+        return M, ("pca", 0, 0)
+    return np.eye(3), ("identity", 0, 0)
+
+
+def _cube_warp_fn(sphere_radius, M):
+    """warp(dirs, offsets) -> Nx3 mapping unit directions onto the cube surface
+    (L-infinity projection) with over/under applied along the local face normal."""
+    R = float(sphere_radius)
+    Mrot = np.asarray(M, float)
+
+    def warp(dirs, offsets):
+        d = np.asarray(dirs, float)
+        if d.size == 0:
+            return np.zeros((0, 3), float)
+        d = d @ Mrot
+        o = np.asarray(offsets, float)
+        adx = np.abs(d)
+        s = np.max(adx, axis=1)
+        s[s < 1.0e-12] = 1.0
+        base = R * d / s[:, None]
+        dom = np.argmax(adx, axis=1)
+        nn = np.zeros_like(d)
+        rows = np.arange(len(d))
+        nn[rows, dom] = np.sign(d[rows, dom])
+        nn[nn[rows, dom] == 0.0, :] = 0.0
+        return base + o[:, None] * nn
+
+    return warp
+
+
+def _warp_components_to_cube(xyz_components, sphere_radius, M, xyz_spacing,
+                             return_warp=False):
+    """Warp spherical components onto the cube (smooth style)."""
+    R = float(sphere_radius)
+    warp = _cube_warp_fn(R, M)
+    out = []
+    for arr in xyz_components:
+        arr = np.asarray(arr, float)
+        if len(arr) == 0:
+            out.append(np.zeros((0, 3), float))
+            continue
+        r = np.linalg.norm(arr, axis=1)
+        safe = r > 1.0e-12
+        d = np.zeros_like(arr)
+        d[safe] = arr[safe] / r[safe, None]
+        if not np.all(safe):
+            d = _normalize_rows(d)
+        out.append(_geom_resample_closed_3d(warp(d, r - R), xyz_spacing))
+    if return_warp:
+        def _wp(a):
+            a = np.asarray(a, float)
+            if len(a) == 0:
+                return a
+            r = np.linalg.norm(a, axis=1)
+            safe = r > 1.0e-12
+            d = np.zeros_like(a)
+            d[safe] = a[safe] / r[safe, None]
+            if not np.all(safe):
+                d = _normalize_rows(d)
+            return warp(d, r - R)
+        return out, _wp
+    return out
+
+
+def _clean_ortho_path(points, grid):
+    """Tidy an axis-aligned closed path: drop repeated points, merge collinear
+    runs, and undo immediate backtracks (A -> B -> A)."""
+    pts = [np.asarray(p, float) for p in points]
+    if len(pts) < 2:
+        return pts
+    tol = 0.25 * float(grid)
+
+    # remove consecutive duplicates (cyclically)
+    dedup = [pts[0]]
+    for p in pts[1:]:
+        if np.max(np.abs(p - dedup[-1])) > tol:
+            dedup.append(p)
+    if len(dedup) > 1 and np.max(np.abs(dedup[0] - dedup[-1])) <= tol:
+        dedup.pop()
+    pts = dedup
+    n = len(pts)
+    if n < 3:
+        return pts
+
+    changed = True
+    while changed and len(pts) >= 3:
+        changed = False
+        m = len(pts)
+        out = []
+        i = 0
+        skip = set()
+        # merge collinear triples and cancel backtracks in one cyclic pass
+        result = []
+        keep = [True] * m
+        for i in range(m):
+            a = pts[(i - 1) % m]
+            b = pts[i]
+            c = pts[(i + 1) % m]
+            d1 = b - a
+            d2 = c - b
+            n1 = np.linalg.norm(d1)
+            n2 = np.linalg.norm(d2)
+            if n1 < tol or n2 < tol:
+                keep[i] = False
+                changed = True
+                continue
+            u1 = d1 / n1
+            u2 = d2 / n2
+            if np.dot(u1, u2) > 0.999:            # collinear: b is redundant
+                keep[i] = False
+                changed = True
+            elif np.dot(u1, u2) < -0.999:          # backtrack: drop b
+                keep[i] = False
+                changed = True
+        pts = [p for p, k in zip(pts, keep) if k]
+        if len(pts) < 3:
+            break
+    return pts
+
+
+def _seg_seg_distance(p1, p2, q1, q2):
+    """Minimum distance between 3D segments [p1,p2] and [q1,q2]."""
+    d1 = p2 - p1
+    d2 = q2 - q1
+    r = p1 - q1
+    a = float(d1 @ d1)
+    e = float(d2 @ d2)
+    f = float(d2 @ r)
+    if a <= 1.0e-12 and e <= 1.0e-12:
+        return float(np.linalg.norm(r))
+    if a <= 1.0e-12:
+        s = 0.0
+        t = min(1.0, max(0.0, f / e))
+    else:
+        c = float(d1 @ r)
+        if e <= 1.0e-12:
+            t = 0.0
+            s = min(1.0, max(0.0, -c / a))
+        else:
+            b = float(d1 @ d2)
+            den = a * e - b * b
+            s = min(1.0, max(0.0, (b * f - c * e) / den)) if den > 1.0e-12 else 0.0
+            t = (b * s + f) / e
+            if t < 0.0:
+                t = 0.0
+                s = min(1.0, max(0.0, -c / a))
+            elif t > 1.0:
+                t = 1.0
+                s = min(1.0, max(0.0, (b - c) / a))
+    cp1 = p1 + s * d1
+    cp2 = q1 + t * d2
+    return float(np.linalg.norm(cp1 - cp2))
+
+
+def _rot_about_unit_axis(axis, angle):
+    """Rodrigues rotation matrix about a unit ``axis`` by ``angle`` radians."""
+    a = _normalize_vector(axis)
+    K = _skew3(a)
+    return np.eye(3) + math.sin(angle) * K + (1.0 - math.cos(angle)) * (K @ K)
+
+
+def _cube_point(u, radius):
+    """L-infinity projection of direction ``u`` onto the cube of the given
+    (half-)radius -- i.e. the point on that cube shell in direction ``u``."""
+    u = np.asarray(u, float)
+    s = float(np.max(np.abs(u)))
+    return radius * u / (s if s > 1.0e-12 else 1.0)
+
+
+def _ortho_connector(A, B):
+    """Axis-aligned path from A to B using at most three segments -- one per cube
+    axis, largest displacement first (equivariant under cube rotations)."""
+    A = np.asarray(A, float)
+    B = np.asarray(B, float)
+    d = B - A
+    order = sorted(range(3), key=lambda ax: -abs(d[ax]))
+    pts = [A.copy()]
+    cur = A.copy()
+    for ax in order:
+        if abs(d[ax]) > 1.0e-9:
+            cur = cur.copy()
+            cur[ax] = B[ax]
+            pts.append(cur)
+    if len(pts) == 1:
+        pts.append(B.copy())
+    return pts
+
+
+def _components_self_intersect(components, tol):
+    """True if any two non-adjacent segments of the closed polylines come within
+    ``tol`` -- i.e. the 3D curve is not a valid embedding."""
+    segs = []
+    for ci, P in enumerate(components):
+        P = np.asarray(P, float)
+        n = len(P)
+        for k in range(n):
+            segs.append((ci, k, n, P[k], P[(k + 1) % n]))
+    for i in range(len(segs)):
+        ci, ki, ni, a, b = segs[i]
+        for j in range(i + 1, len(segs)):
+            cj, kj, nj, c, d = segs[j]
+            if ci == cj and (abs(ki - kj) <= 1 or abs(ki - kj) >= ni - 1):
+                continue
+            if _seg_seg_distance(a, b, c, d) < tol:
+                return True
+    return False
+
+
+def _orthogonalize_cube_curve(pts, grid):
+    """Axis-aligned staircase hugging a closed cube curve: snap to a grid finer
+    than the over/under offset, Manhattan-connect (x-then-y-then-z).  It stays
+    within one grid cell of the disjoint smooth curve, so it cannot self-cross."""
+    pts = np.asarray(pts, float)
+    if len(pts) < 4 or grid <= 0.0:
+        return pts
+    snap = np.round(pts / grid) * grid
+    cells = [snap[0]]
+    for p in snap[1:]:
+        if np.max(np.abs(p - cells[-1])) > 1.0e-9:
+            cells.append(p)
+    if len(cells) > 1 and np.max(np.abs(cells[0] - cells[-1])) <= 1.0e-9:
+        cells.pop()
+    if len(cells) < 3:
+        return pts
+    cells = np.array(cells, float)
+    n = len(cells)
+    out = []
+    for i in range(n):
+        a = cells[i]
+        b = cells[(i + 1) % n]
+        out.append(a.copy())
+        cur = a.copy()
+        for ax in (0, 1, 2):
+            if abs(b[ax] - cur[ax]) > 0.5 * grid:
+                cur = cur.copy()
+                cur[ax] = b[ax]
+                out.append(cur.copy())
+    cleaned = _clean_ortho_path(out, grid)
+    return np.array(cleaned) if len(cleaned) >= 3 else np.array(cells)
+
+
+def _reduce_ortho_turns(components, pin_points_per_comp, grid, min_clear,
+                        max_passes=80):
+    """Collapse staircases into single L-bends, keeping every collapse clear of the
+    other strands (so no crossing is created or destroyed) and pinning the crossing
+    vertices.  Collinear segments are merged immediately so a whole staircase
+    between two crossings flattens; the result is collision-free by construction."""
+    def merge_collinear(verts):
+        changed = True
+        while changed and len(verts) > 3:
+            changed = False
+            n = len(verts)
+            for i in range(n):
+                if verts[i][1]:
+                    continue
+                a = verts[(i - 1) % n][0]
+                b = verts[i][0]
+                c = verts[(i + 1) % n][0]
+                d1 = b - a
+                d2 = c - b
+                n1 = np.linalg.norm(d1)
+                n2 = np.linalg.norm(d2)
+                if n1 < 0.25 * grid or n2 < 0.25 * grid or \
+                        float((d1 / max(n1, 1e-12)) @ (d2 / max(n2, 1e-12))) > 0.999:
+                    del verts[i]
+                    changed = True
+                    break
+
+    comps = []
+    for c, pinpts in zip(components, pin_points_per_comp):
+        c = np.asarray(c, float)
+        verts = [[c[i].copy(), False] for i in range(len(c))]
+        for pp in (pinpts or []):
+            if len(c):
+                verts[int(np.argmin(np.linalg.norm(c - pp, axis=1)))][1] = True
+        pin_ids = [i for i, v in enumerate(verts) if v[1]]
+        if pin_ids:
+            verts = verts[pin_ids[0]:] + verts[:pin_ids[0]]   # seam at a pin
+        comps.append(verts)
+
+    def clear_ok(ci, i, P, A, D):
+        n = len(comps[ci])
+        skip = {(i - 1) % n, i % n, (i + 1) % n, (i + 2) % n, (i + 3) % n}
+        for cj, vv in enumerate(comps):
+            m = len(vv)
+            for k in range(m):
+                if cj == ci and k in skip:
+                    continue
+                q1 = vv[k][0]
+                q2 = vv[(k + 1) % m][0]
+                if _seg_seg_distance(A, P, q1, q2) < min_clear or \
+                        _seg_seg_distance(P, D, q1, q2) < min_clear:
+                    return False
+        return True
+
+    for _ in range(max_passes):
+        changed = False
+        for ci in range(len(comps)):
+            merge_collinear(comps[ci])
+            again = True
+            while again:
+                again = False
+                verts = comps[ci]
+                for i in range(len(verts) - 3):
+                    if verts[i + 1][1] or verts[i + 2][1]:
+                        continue
+                    A, B, C, D = (verts[i][0], verts[i + 1][0],
+                                  verts[i + 2][0], verts[i + 3][0])
+                    dAB, dCD, dBC = B - A, D - C, C - B
+                    if (np.linalg.norm(dAB) < 1e-9 or np.linalg.norm(dCD) < 1e-9
+                            or np.linalg.norm(dBC) < 1e-9):
+                        continue
+                    axAB = int(np.argmax(np.abs(dAB)))
+                    if (int(np.argmax(np.abs(dCD))) != axAB
+                            or np.sign(dAB[axAB]) != np.sign(dCD[axAB])
+                            or int(np.argmax(np.abs(dBC))) == axAB):
+                        continue
+                    P = A.copy()
+                    P[axAB] = D[axAB]
+                    if not clear_ok(ci, i, P, A, D):
+                        continue
+                    verts[i + 1:i + 3] = [[P, False]]
+                    merge_collinear(verts)
+                    changed = True
+                    again = True
+                    break
+        if not changed:
+            break
+    return [np.array([v[0] for v in verts]) for verts in comps]
+
+
+def _symmetrize_cube_anchors(model, anchors, cube_order, cube_axis):
+    """Snap crossing anchor directions to EXACT ``cube_order``-fold symmetry about
+    ``cube_axis`` by orbit-averaging, so the routed angled diagram is exactly
+    symmetric.  Returns the symmetrized unit anchors, or None if the DT has no
+    matching cyclic symmetry."""
+    sym = _detect_dt_rotational_symmetry(model)
+    if not sym or cube_order < 2:
+        return None
+    kk, snode = sym
+    if kk % cube_order != 0:
+        return None
+    ncr = len(anchors)
+    try:
+        step1 = [int(snode((i, "over"))[0]) for i in range(ncr)]
+    except Exception:  # noqa: BLE001
+        return None
+    if sorted(step1) != list(range(ncr)):
+        return None
+    # permutation for ONE cube-fold step = the kk-fold step applied kk/cube_order times
+    perm = list(range(ncr))
+    for _ in range(kk // cube_order):
+        perm = [step1[perm[i]] for i in range(ncr)]
+    if sorted(perm) != list(range(ncr)):
+        return None
+    Rk = _rot_about_unit_axis(cube_axis, 2.0 * math.pi / cube_order)
+    out = np.zeros_like(anchors)
+    for i in range(ncr):
+        acc = np.zeros(3, float)
+        idx = i
+        Rj = np.eye(3)
+        for _j in range(cube_order):
+            acc += Rj.T @ anchors[idx]           # Rk^{-j} @ anchors[perm^j(i)]
+            idx = perm[idx]
+            Rj = Rj @ Rk
+        out[i] = acc / float(cube_order)
+    return _normalize_rows(out)
+
+
+def _build_cubic_angled_components(xyz_components, model, sphere_radius,
+                                   sphere_offset, M, xyz_spacing, skeleton=None,
+                                   status_messages=None, return_warp=False,
+                                   cube_info=None):
+    """Route the diagram as axis-aligned 90-degree wires on a 3-shell cube.
+
+    Three concentric cube shells carry the diagram: crossings sit on the MIDDLE
+    shell (radius R); the over-pass rides the OUTER shell (R+off) and the
+    under-pass the INNER shell (R-off), so the two strands are radially separated
+    and cross at 90 degrees.  Each connector between consecutive crossings is at
+    most three axis-aligned segments (one per cube axis).  When the DT has a
+    cyclic symmetry the crossing anchors are snapped to exact k-fold symmetry
+    about the aligned cube axis and the connector rule is equivariant, so the
+    routing is exactly symmetric; local backtracks and tiny loops are removed.
+
+    Multi-strand orthogonal routing is not yet collision-free: for a link where
+    the minimal wires would self-cross (typically denser multi-component links)
+    the routing falls back to the smooth cube map, with a warning, so the exported
+    curve is always a valid embedding.
+    """
+    _, warp_pts = _warp_components_to_cube(
+        xyz_components, sphere_radius=sphere_radius, M=M,
+        xyz_spacing=xyz_spacing, return_warp=True)
+    R = float(sphere_radius)
+    off = abs(float(sphere_offset))
+    Mrot = np.asarray(M, float)
+
+    def _smooth_fallback(msg):
+        smooth = _warp_components_to_cube(xyz_components, R, M, xyz_spacing)
+        if status_messages is not None:
+            status_messages.append(msg)
+        return (smooth, warp_pts) if return_warp else smooth
+
+    if skeleton is None or skeleton.get("points") is None \
+            or not len(skeleton.get("points", [])):
+        return _smooth_fallback("[info] cubic-kamada angled: no gadget anchors; "
+                                "smooth map used.")
+
+    anchors = np.asarray(skeleton["points"], float) @ Mrot     # unit dirs, cube frame
+
+    k_sym = 0
+    if cube_info is not None and cube_info[0] == "symmetry":
+        cube_order = int(cube_info[2])
+        target, _ = _cube_target_axis(int(cube_info[1]))
+        if target is not None:
+            sym_anchors = _symmetrize_cube_anchors(model, anchors, cube_order, target)
+            if sym_anchors is not None:
+                anchors = sym_anchors
+                k_sym = cube_order
+
+    pos_cross = model["pos_cross"]
+    over_at = model["over_at"]
+
+    def pass_point(p):
+        k = pos_cross[p]
+        radius = R + (off if over_at[p] else -off)     # outer for over, inner for under
+        return _cube_point(anchors[k], radius)
+
+    out = []
+    for cp in model["comp_positions"]:
+        pts = [pass_point(p) for p in cp]
+        n = len(pts)
+        path = []
+        for i in range(n):
+            seg = _ortho_connector(pts[i], pts[(i + 1) % n])
+            path.extend(seg[:-1])                  # B is the next segment's start
+        cleaned = _clean_ortho_path(path, grid=max(1.0, 0.5 * off))
+        out.append(np.asarray(cleaned, float) if len(cleaned) >= 3
+                   else np.asarray(path, float))
+
+    if not _components_self_intersect(out, tol=0.5 * off):
+        if status_messages is not None:
+            corners = sum(len(c) for c in out)
+            sym_txt = (" (exact %d-fold symmetry)" % k_sym) if k_sym else ""
+            status_messages.append(
+                "[info] cubic-kamada angled: 3-shell wires, %d corners, <=3 "
+                "segments per connector%s." % (corners, sym_txt))
+        return (out, warp_pts) if return_warp else out
+
+    # The minimal free wires would self-cross (denser multi-component links).
+    # Fall back to a COLLISION-FREE orthogonalisation of the disjoint smooth cube
+    # curve: it hugs that curve (so it cannot self-cross) and its staircases are
+    # then collapsed as far as the inter-strand clearance allows.  Over/under is
+    # still the radial bump built into the smooth curve; crossings are pinned.
+    smooth, warp_pts2 = _warp_components_to_cube(
+        xyz_components, sphere_radius=R, M=M, xyz_spacing=xyz_spacing,
+        return_warp=True)
+    grid = max(0.5, 0.6 * off) if off > 1.0e-6 else max(0.5, 0.5 * float(xyz_spacing))
+    ortho = [_orthogonalize_cube_curve(c, grid) for c in smooth]
+    # crossing anchors on the cube (for pinning): over-layer point per crossing
+    anchors_cube = np.array([_cube_point(anchors[k], R + off) for k in range(len(anchors))])
+    pins = [[] for _ in ortho]
+    for ci, cp in enumerate(model["comp_positions"]):
+        if ci < len(pins):
+            for p in cp:
+                k = pos_cross[p]
+                if 0 <= k < len(anchors_cube):
+                    pins[ci].append(anchors_cube[k])
+    reduced = _reduce_ortho_turns(ortho, pins, grid, min_clear=0.8 * grid)
+    if _components_self_intersect(reduced, tol=0.35 * off):
+        reduced = ortho              # keep the un-collapsed (still collision-free) staircase
+    if status_messages is not None:
+        corners = sum(len(c) for c in reduced)
+        status_messages.append(
+            "[info] cubic-kamada angled: minimal wires self-cross for this link; "
+            "used collision-free orthogonalised wires (%d corners). Exact-symmetry "
+            "minimal routing for multi-component links is still limited." % corners)
+    return (reduced, warp_pts2) if return_warp else reduced
+
+
+# --------------------------------------------------------------------------
 # V5.4: 3D clearance repair + topology audit.
 #
 # Dense diagrams (chains, heavy chains) cannot always be laid out on a single
@@ -6156,6 +6791,7 @@ def build_spherical_xyz_components(
     surface_tube=0.35,
     surface_orient=0.0,
     surface_tilt=0.0,
+    cube_style="smooth",
     skeleton_out=None,
     skeleton_grid=24,
     xyz_repair=True,
@@ -6221,8 +6857,10 @@ def build_spherical_xyz_components(
         raise ValueError("--xyz-smooth-passes must be non-negative.")
 
     layout = str(sphere_layout or "spherical-kamada").strip().lower()
-    if skeleton_out is None and layout in ("spherical-kamada", "shaped-kamada"):
+    if skeleton_out is None and layout in ("spherical-kamada", "shaped-kamada",
+                                           "cubic-kamada"):
         skeleton_out = {}          # V5.4: anchors needed for clearance repair
+                                   # (and, for cubic-kamada, cube orientation)
     _stereo_safe = (layout == "stereo-safe")
     if _stereo_safe:
         # V5.4 correct-by-construction mode: lift the AUDITED planar layout
@@ -6245,9 +6883,10 @@ def build_spherical_xyz_components(
             sphere_bump_frac=sphere_bump_frac,
             xyz_spacing=(0.6 * xyz_spacing if _stereo_safe else xyz_spacing),
         )
-    elif layout in ("spherical-kamada", "shaped-kamada"):
-        # Both use the sphere-native construction; shaped-kamada additionally
-        # warps the finished spherical curve onto the chosen surface below.
+    elif layout in ("spherical-kamada", "shaped-kamada", "cubic-kamada"):
+        # All three use the sphere-native construction; shaped-kamada warps the
+        # finished spherical curve onto a shaped surface below, and cubic-kamada
+        # maps it onto a cube (smooth) or routes it as 90-degree segments.
         xyz_components = _build_spherical_kamada_xyz_components(
             model,
             G,
@@ -6314,6 +6953,60 @@ def build_spherical_xyz_components(
         xyz_components, _ = _run_xyz_repair_stage(
             xyz_components, _clr, "post-warp", _msgs,
             anchors=_anch_w, exclude_radius=_excl)
+
+    if layout == "cubic-kamada":
+        # Orient the spherical curve so a detected cyclic symmetry aligns with a
+        # matching cube axis (else PCA), then map onto the cube.
+        _anch_unit = None
+        if skeleton_out is not None and skeleton_out.get("points") is not None \
+                and len(skeleton_out.get("points", [])):
+            _anch_unit = np.asarray(skeleton_out["points"], float)
+        _dirs_list = []
+        for _arr in xyz_components:
+            _arr = np.asarray(_arr, float)
+            if len(_arr):
+                _rr = np.linalg.norm(_arr, axis=1)
+                _sf = _rr > 1.0e-12
+                if np.any(_sf):
+                    _dirs_list.append(_arr[_sf] / _rr[_sf, None])
+        _dirs_all = np.vstack(_dirs_list) if _dirs_list else (
+            _anch_unit if _anch_unit is not None else np.zeros((0, 3), float))
+        M_cube, _cube_info = _cube_orientation_frame(model, _anch_unit, _dirs_all)
+        _style = str(cube_style or "smooth").strip().lower()
+        if _style == "angled":
+            xyz_components, _warp_pts = _build_cubic_angled_components(
+                xyz_components,
+                model=model,
+                sphere_radius=sphere_radius,
+                sphere_offset=sphere_offset,
+                M=M_cube,
+                xyz_spacing=xyz_spacing,
+                skeleton=skeleton_out,
+                status_messages=_msgs,
+                return_warp=True,
+                cube_info=_cube_info,
+            )
+        else:
+            xyz_components, _warp_pts = _warp_components_to_cube(
+                xyz_components, sphere_radius=sphere_radius, M=M_cube,
+                xyz_spacing=xyz_spacing, return_warp=True)
+        if _cube_info[0] == "symmetry":
+            _orient_desc = ("symmetry k=%d aligned to the cube's %d-fold axis"
+                            % (_cube_info[1], _cube_info[2]))
+        else:
+            _orient_desc = "PCA major axis (no usable symmetry)" \
+                if _cube_info[0] == "pca" else "identity"
+        _msgs.append("[info] cubic-kamada (%s): oriented by %s." % (_style, _orient_desc))
+        # Smooth curves may still pinch near cube edges; repair like the surface
+        # warp.  Angled routing is orthogonal by construction, so it is not
+        # repaired (repair would bend the 90-degree segments).
+        if xyz_repair and _clr > 0.0 and _style != "angled":
+            _anch_w = _anch
+            if _anch is not None and _warp_pts is not None:
+                _anch_w = _warp_pts(np.asarray(_anch, float))
+            xyz_components, _ = _run_xyz_repair_stage(
+                xyz_components, _clr, "post-cube-warp", _msgs,
+                anchors=_anch_w, exclude_radius=_excl)
 
     if audit_dt:
         _res = audit_xyz_components(xyz_components, audit_dt)
@@ -6389,6 +7082,7 @@ def write_spherical_xyz(
     surface_tube=0.35,
     surface_orient=0.0,
     surface_tilt=0.0,
+    cube_style="smooth",
     xyz_repair=True,
     xyz_clearance=None,
     audit_dt=None,
@@ -6425,6 +7119,7 @@ def write_spherical_xyz(
         surface_tube=surface_tube,
         surface_orient=surface_orient,
         surface_tilt=surface_tilt,
+        cube_style=cube_style,
         xyz_repair=xyz_repair,
         xyz_clearance=xyz_clearance,
         audit_dt=audit_dt,
@@ -7618,6 +8313,7 @@ def run_pipeline(args, status_stream=None):
             surface_tube=getattr(args, "surface_tube", 0.35),
             surface_orient=getattr(args, "surface_orient", 0.0),
             surface_tilt=getattr(args, "surface_tilt", 0.0),
+            cube_style=getattr(args, "cube_style", "smooth"),
             xyz_repair=not getattr(args, "no_xyz_repair", False),
             xyz_clearance=(getattr(args, "xyz_clearance", 0.0) or None),
             audit_dt=getattr(args, "dt", None),
@@ -7647,6 +8343,7 @@ def run_pipeline(args, status_stream=None):
                 surface_tube=getattr(args, "surface_tube", 0.35),
                 surface_orient=getattr(args, "surface_orient", 0.0),
                 surface_tilt=getattr(args, "surface_tilt", 0.0),
+                cube_style=getattr(args, "cube_style", "smooth"),
                 skeleton_out=_skel,
                 skeleton_grid=getattr(args, "proj_grid_density", 24),
             )
@@ -8173,12 +8870,15 @@ def build_arg_parser():
     )
     ap.add_argument(
         "--sphere-layout",
-        choices=["spherical-kamada", "shaped-kamada", "stereographic", "stereo-safe"],
+        choices=["spherical-kamada", "shaped-kamada", "cubic-kamada",
+                 "stereographic", "stereo-safe"],
         default="spherical-kamada",
         help=(
             "XYZ sphere layout. 'spherical-kamada' spreads the graph directly "
             "on S^2 and is the default; 'shaped-kamada' warps that spherical "
             "construction onto a shaped surface (see --surface-shape); "
+            "'cubic-kamada' maps it onto a cube, aligning a detected symmetry "
+            "with a cube axis (see --cube-style); "
             "'stereographic' uses the 2D diagram and inverse stereographic "
             "projection; 'stereo-safe' preserves the audited 2D angular "
             "positions and is the correct-by-construction choice after a "
@@ -8192,6 +8892,18 @@ def build_arg_parser():
         help=(
             "Target surface for --sphere-layout shaped-kamada: ellipsoid, "
             "cylinder, or torus. Default: ellipsoid."
+        ),
+    )
+    ap.add_argument(
+        "--cube-style",
+        dest="cube_style",
+        choices=["smooth", "angled"],
+        default="smooth",
+        help=(
+            "For --sphere-layout cubic-kamada: 'smooth' maps the strands onto "
+            "the cube as smooth curves (like the sphere); 'angled' routes them "
+            "as axis-aligned 90-degree segments (strands turn only 90 degrees "
+            "and over/under strands cross at 90 degrees). Default: smooth."
         ),
     )
     ap.add_argument(
@@ -8783,6 +9495,7 @@ def run_gui(initial_args):
     relax_passes_var = tk.StringVar(value=str(getattr(initial_args, "relax_passes", 0)))
     relax_strength_var = tk.StringVar(value=str(getattr(initial_args, "relax_strength", 0.5)))
     surface_shape_var = tk.StringVar(value=getattr(initial_args, "surface_shape", "ellipsoid"))
+    cube_style_var = tk.StringVar(value=getattr(initial_args, "cube_style", "smooth"))
     surface_auto_orient_var = tk.BooleanVar(value=bool(getattr(initial_args, "surface_auto_orient", True)))
     surface_auto_aspect_var = tk.BooleanVar(value=bool(getattr(initial_args, "surface_auto_aspect", True)))
     surface_aspect_var = tk.StringVar(value=str(getattr(initial_args, "surface_aspect", 1.6)))
@@ -9041,7 +9754,8 @@ def run_gui(initial_args):
     ttk.Label(settings, text="sphere layout").grid(row=row, column=0, sticky="w", pady=3)
     ttk.Combobox(
         settings, textvariable=sphere_layout_var,
-        values=["spherical-kamada", "shaped-kamada", "stereographic", "stereo-safe"],
+        values=["spherical-kamada", "shaped-kamada", "cubic-kamada",
+                "stereographic", "stereo-safe"],
         width=18, state="readonly"
     ).grid(row=row, column=1, sticky="w", pady=3)
     add_help_button(row, "sphere_layout")
@@ -9057,6 +9771,19 @@ def run_gui(initial_args):
     add_help_button(row, "surface_shape")
     dynamic_widgets.setdefault("surface_shape", []).extend(
         [(_surface_shape_lbl, "label"), (_surface_shape_combo, "combo")]
+    )
+    row += 1
+
+    _cube_style_lbl = ttk.Label(settings, text="cube style")
+    _cube_style_lbl.grid(row=row, column=0, sticky="w", pady=3)
+    _cube_style_combo = ttk.Combobox(
+        settings, textvariable=cube_style_var,
+        values=["smooth", "angled"], width=18, state="readonly"
+    )
+    _cube_style_combo.grid(row=row, column=1, sticky="w", pady=3)
+    add_help_button(row, "cube_style")
+    dynamic_widgets.setdefault("cube_style", []).extend(
+        [(_cube_style_lbl, "label"), (_cube_style_combo, "combo")]
     )
     row += 1
     _surface_auto_aspect_chk = ttk.Checkbutton(
@@ -9428,10 +10155,12 @@ def run_gui(initial_args):
 
         sl = sphere_layout_var.get()
         is_shaped_k = (sl == "shaped-kamada")
-        kamada_family = sl in ("spherical-kamada", "shaped-kamada")
+        is_cubic_k = (sl == "cubic-kamada")
+        kamada_family = sl in ("spherical-kamada", "shaped-kamada", "cubic-kamada")
         s_shape = surface_shape_var.get()
         s_auto_aspect = bool(surface_auto_aspect_var.get())
         s_auto_orient = bool(surface_auto_orient_var.get())
+        _set_dynamic("cube_style", is_cubic_k)
         _set_dynamic("surface_shape", is_shaped_k)
         _set_dynamic("surface_auto_aspect", is_shaped_k)
         _set_dynamic("surface_auto_orient", is_shaped_k)
@@ -9507,6 +10236,7 @@ def run_gui(initial_args):
             write_xyz=True,
             no_image=False,
             sphere_layout=sphere_layout_var.get(),
+            cube_style=cube_style_var.get(),
             direct_connecting=bool(direct_connecting_var.get()),
             sphere_radius=_float_value(sphere_radius_var, "sphere radius"),
             sphere_extent=_float_value(sphere_extent_var, "sphere extent"),
@@ -9810,6 +10540,7 @@ def run_gui(initial_args):
                 surface_tube=ns.surface_tube,
                 surface_orient=ns.surface_orient,
                 surface_tilt=ns.surface_tilt,
+                cube_style=getattr(ns, "cube_style", "smooth"),
                 xyz_repair=not getattr(ns, 'no_xyz_repair', False),
                 xyz_clearance=(getattr(ns, 'xyz_clearance', 0.0) or None),
                 audit_dt=getattr(ns, 'dt', None),
@@ -9898,6 +10629,7 @@ def run_gui(initial_args):
                 surface_tube=ns.surface_tube,
                 surface_orient=ns.surface_orient,
                 surface_tilt=ns.surface_tilt,
+                cube_style=getattr(ns, "cube_style", "smooth"),
                 xyz_repair=not getattr(ns, 'no_xyz_repair', False),
                 xyz_clearance=(getattr(ns, 'xyz_clearance', 0.0) or None),
                 audit_dt=getattr(ns, 'dt', None),
@@ -9960,6 +10692,7 @@ def run_gui(initial_args):
             surface_tube=ns.surface_tube,
             surface_orient=ns.surface_orient,
             surface_tilt=ns.surface_tilt,
+            cube_style=getattr(ns, "cube_style", "smooth"),
             skeleton_out=skel,
             skeleton_grid=getattr(ns, "proj_grid_density", 24),
             xyz_repair=not getattr(ns, "no_xyz_repair", False),
@@ -10330,6 +11063,7 @@ def run_gui(initial_args):
                 surface_tube=ns.surface_tube,
                 surface_orient=ns.surface_orient,
                 surface_tilt=ns.surface_tilt,
+                cube_style=getattr(ns, "cube_style", "smooth"),
                 xyz_repair=not getattr(ns, "no_xyz_repair", False),
                 xyz_clearance=(getattr(ns, "xyz_clearance", 0.0) or None),
                 audit_dt=getattr(ns, "dt", None),
@@ -10394,6 +11128,7 @@ def run_gui(initial_args):
         "surface_shape": surface_shape_var, "surface_aspect": surface_aspect_var,
         "surface_tube": surface_tube_var, "surface_orient": surface_orient_var,
         "surface_tilt": surface_tilt_var,
+        "cube_style": cube_style_var,
     }
     session_bool_vars = {
         "direct_connecting": direct_connecting_var,
